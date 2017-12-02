@@ -1,0 +1,12 @@
+
+OCaml.library("ocplib-net",
+  ocaml + {
+    files = '[ netTimer.ml
+               netLoop.ml
+               netCommand.ml
+               netTypes.ml netUtils.ml
+               tcpSocket.ml tcpServerSocket.ml
+             ];
+    requires = '[ ocplib-compat lwt ocplib-endian ];
+  });
+

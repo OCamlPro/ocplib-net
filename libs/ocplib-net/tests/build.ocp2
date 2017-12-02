@@ -1,0 +1,13 @@
+
+OCaml.program("ocp-net-server",
+  ocaml + {
+    files = '[ server.ml ];
+    requires = '[ ocplib-net "lwt.unix" ];
+  });
+
+OCaml.program("ocp-net-client",
+  ocaml + {
+    files = '[ client.ml ];
+    requires = '[ ocplib-net ];
+  });
+
