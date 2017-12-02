@@ -23,6 +23,46 @@ let exec_handler t event =
     Printf.eprintf "TcpServerSocket: exception %S in handler\n%!"
                    (Printexc.to_string exn)
 
+
+
+
+
+
+
+
+(* val close : t -> close_reason -> unit *)
+let close t reason =
+  match t.sock with
+  | Closed _ -> ()
+  | Socket fd ->
+     t.sock <- Closed reason;
+     Lwt.async (fun () ->
+         Lwt.bind (Lwt_unix.close fd)
+                  (fun () ->
+                    exec_handler t (`CLOSED reason);
+                    Lwt.return ()
+                  ))
+
+(* val closed : t -> bool *)
+let closed t =
+  match t.sock with
+  | Socket _ -> false
+  | Closed _ -> true
+
+(* val handler : t -> handler *)
+let handler t = t.handler
+(* val set_handler : t -> handler -> unit *)
+let set_handler t h = t.handler <- h
+
+
+
+
+
+
+
+
+
+
 let inet_addr_loopback = Unix.inet_addr_of_string "127.0.0.1"
 
 (* val create : name:string -> Unix.inet_addr -> int -> handler -> t *)
@@ -80,14 +120,8 @@ let create ~name ?(addr=Unix.inet_addr_any) ?(port=0) handler =
 
 let port t = t.port
 
-(* val close : t -> close_reason -> unit *)
 
-(* val set_rtimeout : t -> float -> unit *)
-(* val set_lifetime : t -> float -> unit *)
-(* val set_handler : t -> handler -> unit *)
 
-(* val handler : t -> handler *)
-(* val closed : t -> bool *)
 
 let string_of_event (event : tcpServerEvent) =
   match event with
@@ -98,22 +132,9 @@ let string_of_event (event : tcpServerEvent) =
      Printf.sprintf "ACCEPTING %d" port
   | #NetTypes.event as event -> NetUtils.string_of_event event
 
-let close t reason =
-  match t.sock with
-  | Closed _ -> ()
-  | Socket fd ->
-     t.sock <- Closed reason;
-     Lwt_unix.close fd;
-     exec_handler t (`CLOSED reason)
-
-let closed t =
-  match t.sock with
-  | Socket _ -> false
-  | Closed _ -> true
-
-let handler t = t.handler
-let set_handler t h = t.handler <- h
-
-let set_lifetime t lifetime = assert false (* TODO *)
-let set_rtimeout t rtimeout = assert false (* TODO *)
-let set_wtimeout t wtimeout = assert false (* TODO *)
+(* val set_rtimeout : t -> float -> unit *)
+let set_rtimeout _ = assert false
+(* val set_wtimeout : t -> float -> unit *)
+let set_wtimeout _ = assert false
+(* val set_lifetime : t -> float -> unit *)
+let set_lifetime _ = assert false

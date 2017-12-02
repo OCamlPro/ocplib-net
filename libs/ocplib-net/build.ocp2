@@ -4,8 +4,11 @@ OCaml.library("ocplib-net",
     files = '[ netTimer.ml
                netLoop.ml
                netCommand.ml
-               netTypes.ml netUtils.ml
-               tcpSocket.ml tcpServerSocket.ml
+               netTypes.ml
+               netUtils.ml
+               bytesCache.ml
+               tcpBuffer.ml
+               tcpClientSocket.ml tcpServerSocket.ml
              ];
     requires = '[ ocplib-compat lwt ocplib-endian ];
   });
