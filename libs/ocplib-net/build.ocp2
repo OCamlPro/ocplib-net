@@ -9,6 +9,7 @@ OCaml.library("ocplib-net",
                bytesCache.ml
                tcpBuffer.ml
                tcpClientSocket.ml tcpServerSocket.ml
+               concur.ml
              ];
     requires = '[ ocplib-compat lwt ocplib-endian ];
   });

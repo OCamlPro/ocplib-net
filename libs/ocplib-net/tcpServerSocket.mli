@@ -1,19 +1,29 @@
 open NetTypes
 
-type t
+type 'info t
 type event = tcpServerEvent
-type handler = t -> event -> unit
+type 'info handler = 'info t -> event -> unit
 
-val create : name:string -> ?addr:Unix.inet_addr -> ?port:int -> handler -> t
-val close : t -> close_reason -> unit
+val create :
+  ?name:string ->
+  'info ->
+  Unix.sockaddr ->
+  'info handler ->
+  'info t
+val close : 'info t -> close_reason -> unit
 
+                                   (*
 val set_rtimeout : t -> float -> unit
 val set_wtimeout : t -> float -> unit
 val set_lifetime : t -> float -> unit
-val set_handler : t -> handler -> unit
+                                    *)
 
-val handler : t -> handler
-val closed : t -> bool
-val port : t -> int
+val set_handler : 'info t -> 'info handler -> unit
+
+val handler : 'info t -> 'info handler
+val closed : 'info t -> bool
+val nconnections : 'info t -> int
+val sockaddr : 'info t -> Unix.sockaddr
+val info : 'info t -> 'info
 
 val string_of_event : event -> string

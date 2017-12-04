@@ -7,7 +7,7 @@ type t = {
     mutable max_buf_size : int;
   }
 
-(* BufferOverflow (previous_len, added_len, max_len) *)
+(* BufferWriteOverflow (previous_len, added_len, max_len) *)
 exception BufferWriteOverflow of int * int * int
 
 exception BufferReadOverflow of int * int
@@ -77,7 +77,8 @@ let add_bytes_from_read b fd n =
   Lwt.bind (Lwt.catch
               (fun () -> Lwt_unix.read fd b.buf curpos n)
               (fun exn ->
-                Printf.eprintf "Exception in Lwt_unix.read\n%!";
+                Printf.eprintf "Lwt_unix.read: exception %s\n%!"
+                               (Printexc.to_string exn);
                 Lwt.return 0
            ))
            (fun nread ->
@@ -91,20 +92,29 @@ let get b pos =
     raise (BufferReadOverflow (pos, b.len));
   b.buf.[b.pos + pos]
 
-let read b s pos len =
-  if b.len < len then
-    raise (BufferReadOverflow (len, b.len));
+let blit b pos0 s pos len =
+  if b.len < pos0 + len then
+    raise (BufferReadOverflow (pos0+len, b.len));
   (* Printf.eprintf "String.blit %d/%d/%d %d/%d/%d\n%!"
                  (String.length b.buf) b.pos b.len
                  (String.length s) pos len; *)
-  String.blit b.buf b.pos s pos len;
+  String.blit b.buf b.pos s pos len
+
+let read b s pos len =
+  blit b 0 s pos len;
   release_bytes b len
 
 let write b fd =
   Lwt.bind (Lwt.catch
               (fun () -> Lwt_unix.write fd b.buf b.pos b.len)
               (fun exn ->
-                Printf.eprintf "Exception in Lwt_unix.write\n%!";
+                begin
+                  match exn with
+                  | Unix.Unix_error(Unix.EPIPE, "write", "") -> ()
+                  | exn ->
+                     Printf.eprintf "Lwt_unix.write: exception %s\n%!"
+                                    (Printexc.to_string exn);
+                end;
                 Lwt.return 0
               ))
            (fun nwritten ->

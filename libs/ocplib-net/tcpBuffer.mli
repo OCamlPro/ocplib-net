@@ -25,6 +25,8 @@ val can_refill : t -> bool
 
 val get : t -> int -> char
 
+(* bytes read are NOT released *)
+val blit : t -> int -> string -> int -> int -> unit
 (* bytes read are immediately released *)
 val read : t -> string -> int -> int -> unit
 

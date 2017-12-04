@@ -20,7 +20,6 @@ type event =
   | `LTIMEOUT  (* called after a timeout on lifetime *)
   ]
 
-
 type tcpSocketEvent = [
   | `CONNECTED  (* we are connected ! *)
   | `CAN_REFILL (* some space if free in the buffer *)
@@ -30,6 +29,6 @@ type tcpSocketEvent = [
   | event ]
 
 type tcpServerEvent = [
-  | `ACCEPTING of int (* port *)
+  | `ACCEPTING
   | `CONNECTION of Lwt_unix.file_descr * Unix.sockaddr
   | event ]

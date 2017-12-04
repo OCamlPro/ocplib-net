@@ -20,6 +20,7 @@
 
 
 open StringCompat
+open NetTypes
 
 (* A simple client-server *)
 
@@ -27,48 +28,34 @@ let debug = false
 
 type 'info connection = {
   info : 'info;
-  fd : Lwt_unix.file_descr;
-  mutable writer: unit Lwt.t;
+  mutable fd : (('info connection) TcpClientSocket.t) option;
 }
 
 let info con = con.info
 
-let rec iter_write fd s pos len =
-  if debug then Printf.eprintf "iter_write...\n%!";
-  Lwt.bind (Lwt_unix.write fd s pos len)
-    (fun nw ->
-      if debug then Printf.eprintf "written %d\n%!" nw;
-      if nw > 0 then
-        let len = len - nw in
-        if len > 0 then
-          iter_write fd s (pos+nw) len
-        else begin
-          BytesCache.putback s;
-          Lwt.return ()
-        end
-      else begin
-        BytesCache.putback s;
-        Lwt.return ()
-      end
-    )
-
 let send_message con msg =
   if debug then Printf.eprintf "send_message...\n%!";
   let msg_len = String.length msg in
-  let total_msg_len = 4+msg_len in
-  let b = BytesCache.get total_msg_len in
+  let b = Bytes.create 4 in
   EndianString.LittleEndian.set_int32 b 0 (Int32.of_int msg_len);
-  Bytes.blit msg 0 b 4 msg_len;
-  con.writer <-
-    (Lwt.bind con.writer (fun () ->
-      iter_write con.fd b 0 total_msg_len));
-  Lwt.async (fun () -> con.writer)
+  match con.fd with
+  | None -> assert false
+  | Some fd ->
+     TcpClientSocket.write_string fd (Bytes.to_string b);
+     TcpClientSocket.write_string fd msg
 
 let shutdown con =
-  Lwt_unix.shutdown con.fd Lwt_unix.SHUTDOWN_ALL
+  match con.fd with
+  | None -> assert false
+  | Some fd ->
+     TcpClientSocket.shutdown fd Closed_by_user
 
 let close con =
-  Lwt.async (fun () -> Lwt_unix.close con.fd)
+  match con.fd with
+  | None -> assert false
+  | Some fd ->
+     TcpClientSocket.close fd Closed_by_user
+
 
 module MakeSocket(S : sig
 
@@ -77,6 +64,7 @@ module MakeSocket(S : sig
 
   val connection_info : server_info -> Unix.sockaddr -> info
 
+  val accepting_handler : server_info -> Unix.sockaddr -> unit
   val connection_handler : info connection -> unit
   val message_handler : info connection -> string -> unit
   val disconnection_handler : info -> unit
@@ -104,124 +92,92 @@ end) = (struct
       Printf.eprintf "Warning: [message_handler] raised exception %s\n%!"
         (Printexc.to_string exn)
 
-  let rec iter_read con b pos =
-    (* Printf.eprintf "\titer_read %d...\n%!" pos; *)
-    let blen = Bytes.length b in
-    let can_read = blen - pos in
-    if can_read < 16384 then begin
-      let newb = BytesCache.get (4 * blen) in
-      Bytes.blit b 0 newb 0 pos;
-      BytesCache.putback b;
-      iter_read con newb pos;
-    end
-    else
-      if Lwt_unix.state con.fd = Lwt_unix.Opened then
-        Lwt.bind (Lwt_unix.read con.fd b pos can_read)
-          (fun nr ->
-             (* Printf.eprintf "\titer_read %d/%d...\n%!" nr pos; *)
-             if nr > 0 then
-               iter_parse con b nr pos
-             else begin
-               BytesCache.putback b;
-               disconnection_handler con.info;
-               Lwt.return ()
-             end)
-      else begin
-        BytesCache.putback b;
-        disconnection_handler con.info;
-        Lwt.return ()
-      end
+  let accepting_handler con sockaddr =
+    try
+      S.accepting_handler con sockaddr
+    with exn ->
+      Printf.eprintf "Warning: [accepting_handler] raised exception %s\n%!"
+        (Printexc.to_string exn)
 
-  and iter_parse con b nr pos =
-      (* Printf.eprintf "\titer_parse %d %d\n%!" nr pos; *)
-    let pos = pos + nr in
-    if pos > 4 then
-      let msg_len = Int32.to_int
-        (EndianString.LittleEndian.get_int32 b 0) in
-        (* Printf.eprintf "\tmsg_len=%d\n" msg_len; *)
-      let total_msg_len = msg_len + 4 in
-      if total_msg_len > pos then
-        iter_read con b pos
-      else
-        let msg = Bytes.sub b 4 msg_len in
-        message_handler con msg;
-        let nr = pos - total_msg_len in
-        if nr > 0 then begin
-          Bytes.blit b total_msg_len b 0 nr;
-          iter_parse con b nr 0
-        end else
-          iter_read con b 0
-    else
-      iter_read con b pos
+  let update_con con fd =
+    match con.fd with
+    | None -> con.fd <- Some fd
+    | Some _ -> ()
+
+  let reader t event =
+    if debug then
+      Printf.eprintf "client event: %s\n%!"
+                   (TcpClientSocket.string_of_event event);
+    let con = TcpClientSocket.info t in
+    update_con con t;
+    match event with
+    | `READ_DONE _n ->
+       if TcpClientSocket.rlength t >= 4 then
+         let s = Bytes.create 4 in
+         TcpClientSocket.blit t 0 s 0 4;
+         let msg_len = Int32.to_int
+                         (EndianString.LittleEndian.get_int32 s 0) in
+         if TcpClientSocket.rlength t >= 4 + msg_len then begin
+             TcpClientSocket.release t 4;
+             let s = Bytes.create msg_len in
+             TcpClientSocket.read t s 0 msg_len;
+             message_handler con s
+           end
+    | `CLOSED _reason ->
+       disconnection_handler con.info;
+    | `CONNECTED ->
+       connection_handler con
+    | _ -> ()
 
   let create ~loopback ?(port=0) context =
-    let sock = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
     let sockaddr = Unix.ADDR_INET(
-      (if loopback then
-          Unix.inet_addr_of_string "127.0.0.1"
-       else
-          Unix.inet_addr_any),
-      port) in
-    Lwt_unix.set_close_on_exec sock;
-    Lwt_unix.setsockopt sock Unix.SO_REUSEADDR true;
-    Lwt_unix.bind sock sockaddr;
-    Lwt_unix.listen sock 20;
-
-    let rec iter_accept () =
-      (* Printf.eprintf "\titer_accept...\n%!"; *)
-      Lwt.bind (Lwt_unix.accept sock)
-        (fun (fd, sock_addr) ->
-          (* Printf.eprintf "\tServer received connection...\n%!"; *)
-          let b = BytesCache.get (1 lsl 16) in
-          let writer = Lwt.return () in
-          let info = S.connection_info context sock_addr in
-          let con = { info; fd; writer } in
-          Lwt.async (fun () -> con.writer);
-          connection_handler con;
-          Lwt.async iter_accept;
-          iter_read con b 0
-        )
-
+                       (if loopback then
+                          Unix.inet_addr_of_string "127.0.0.1"
+                        else
+                          Unix.inet_addr_any),
+                       port) in
+    let _t = TcpServerSocket.create
+               ()
+               sockaddr
+              (fun t event ->
+                if debug then
+                  Printf.eprintf "event: %s\n%!"
+                                 (TcpServerSocket.string_of_event event);
+                match event with
+                | `CONNECTION (fd, sockaddr) ->
+                   let info =
+                     S.connection_info context sockaddr in
+                   let con = { info; fd = None } in
+                   let fd = TcpClientSocket.create
+                              con
+                              fd
+                              reader
+                   in
+                   con.fd <- Some fd
+                | `ACCEPTING ->
+                   accepting_handler context
+                                     (TcpServerSocket.sockaddr t)
+                | _ -> ()
+              )
     in
-    let port = match Unix.getsockname (Lwt_unix.unix_file_descr sock) with
-        Unix.ADDR_INET(_, port) -> port
-      | _ -> assert false in
-    Lwt.async iter_accept;
-    port
+    ()
 
   let create_server = create
 
   let connect info sockaddr =
-    let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-    let writer = Lwt.return () in
-    let con = { info; fd; writer } in
-    let connected = ref true in
-    con.writer <-
-      (Lwt.bind
-         (Lwt.catch
-            (fun () -> Lwt_unix.connect fd sockaddr)
-            (fun exn ->
-               connected := false;
-               disconnection_handler info;
-               Lwt.return ()
-            )
-         )
-         (fun () ->
-            if !connected then begin
-              if debug then Printf.eprintf "Connected\n%!";
-              connection_handler con;
-              let b = Bytes.create 65636 in
-              Lwt.async (fun () -> iter_read con b 0);
-            end ;
-            Lwt.return ()
-         ));
+    let con = { info; fd = None } in
+    let fd = TcpClientSocket.connect
+               con
+               sockaddr
+               reader
+    in
+    con.fd <- Some fd;
     con
-
 
 end : sig
 
-  val create : loopback:bool -> ?port:int -> S.server_info -> int
-  val create_server : loopback:bool -> ?port:int -> S.server_info -> int
+  val create : loopback:bool -> ?port:int -> S.server_info -> unit
+  val create_server : loopback:bool -> ?port:int -> S.server_info -> unit
   val connect : S.info -> Lwt_unix.sockaddr -> S.info connection
 
 end)
@@ -232,6 +188,8 @@ module MakeServer(S : sig
 
   type server_info
   type info
+
+  val accepting_handler : server_info -> Unix.sockaddr -> unit
 
   val connection_info : server_info -> Unix.sockaddr -> info
 
@@ -263,6 +221,11 @@ module MakeClient(S : sig
 end) = MakeSocket(struct
   type server_info = S.info
   include S
+  let accepting_handler _server_info _sockaddr = assert false
   let connection_info _sockaddr = assert false
 end
 )
+
+module Timer = NetTimer
+include NetLoop
+include NetCommand

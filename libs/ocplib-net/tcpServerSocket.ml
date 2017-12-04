@@ -4,16 +4,17 @@ let debug = false
 
 type event = tcpServerEvent
 
-type handler = t -> event -> unit
+type 'info handler = 'info t -> event -> unit
 
- and t = {
+ and 'info t = {
      mutable sock : socket;
 
      name : string;
-     addr : Unix.inet_addr;
+     info : 'info;
 
-     mutable port : int;
-     mutable handler : handler;
+     mutable sockaddr : Unix.sockaddr;
+     mutable handler : 'info handler;
+     mutable nconnections : int;
    }
 
 let exec_handler t event =
@@ -54,6 +55,7 @@ let handler t = t.handler
 (* val set_handler : t -> handler -> unit *)
 let set_handler t h = t.handler <- h
 
+let info t = t.info
 
 
 
@@ -65,20 +67,28 @@ let set_handler t h = t.handler <- h
 
 let inet_addr_loopback = Unix.inet_addr_of_string "127.0.0.1"
 
-(* val create : name:string -> Unix.inet_addr -> int -> handler -> t *)
-let create ~name ?(addr=Unix.inet_addr_any) ?(port=0) handler =
-  let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  let sockaddr = Unix.ADDR_INET(addr, port) in
+let default_sockaddr = Unix.ADDR_INET(Unix.inet_addr_any, 0)
+let create ?(name="unknown")
+           info
+           sockaddr
+           handler =
+  let protocol = match sockaddr with
+    | Unix.ADDR_INET _ -> Unix.PF_INET
+    | Unix.ADDR_UNIX _ -> Unix.PF_UNIX
+  in
+  let fd = Lwt_unix.socket protocol Unix.SOCK_STREAM 0 in
   Lwt_unix.set_close_on_exec fd;
   Lwt_unix.setsockopt fd Unix.SO_REUSEADDR true;
 
   let sock = Socket fd in
+  let nconnections = 0 in
   let t = {
       sock;
       name;
-      addr;
-      port;
+      sockaddr;
+      info;
       handler;
+      nconnections;
     } in
 
   let rec iter_accept () =
@@ -95,6 +105,7 @@ let create ~name ?(addr=Unix.inet_addr_any) ?(port=0) handler =
                   if debug then
                     Printf.eprintf "\tServer received connection...\n%!";
                   Lwt.async (fun () ->
+                      t.nconnections <- t.nconnections + 1;
                       exec_handler t (`CONNECTION (fd, sock_addr));
                       Lwt.return ()
                     );
@@ -107,29 +118,21 @@ let create ~name ?(addr=Unix.inet_addr_any) ?(port=0) handler =
       (Lwt_unix.bind fd sockaddr)
       (fun () ->
         Lwt_unix.listen fd 20;
-        let port = match Unix.getsockname (Lwt_unix.unix_file_descr fd) with
-            Unix.ADDR_INET(_, port) -> port
-          | _ -> assert false in
-        t.port <- port;
-        exec_handler t (`ACCEPTING port);
+        t.sockaddr <- Unix.getsockname (Lwt_unix.unix_file_descr fd);
+        exec_handler t `ACCEPTING;
         iter_accept ()
       )
   in
   Lwt.async bind_socket;
   t
 
-let port t = t.port
-
-
-
 
 let string_of_event (event : tcpServerEvent) =
   match event with
-  | `CONNECTION (fd, addr) ->
+  | `CONNECTION (fd, sockaddr) ->
      Printf.sprintf "CONNECTION FROM %s"
-                    (NetUtils.string_of_sockaddr addr)
-  | `ACCEPTING port ->
-     Printf.sprintf "ACCEPTING %d" port
+                    (NetUtils.string_of_sockaddr sockaddr)
+  | `ACCEPTING -> "ACCEPTING"
   | #NetTypes.event as event -> NetUtils.string_of_event event
 
 (* val set_rtimeout : t -> float -> unit *)
@@ -138,3 +141,6 @@ let set_rtimeout _ = assert false
 let set_wtimeout _ = assert false
 (* val set_lifetime : t -> float -> unit *)
 let set_lifetime _ = assert false
+
+let nconnections t = t.nconnections
+let sockaddr t = t.sockaddr
