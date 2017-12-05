@@ -8,7 +8,7 @@ open NetTypes
 let () =
   let nconnections = ref 0 in
   let sockaddr = Unix.ADDR_INET(Unix.inet_addr_any, 40_000) in
-  let _t = TcpServerSocket.create
+  let t = TcpServerSocket.create
              ~name:"server" () sockaddr
              (fun t event ->
                Printf.eprintf "server: event %s\n%!"
@@ -57,4 +57,5 @@ let () =
                | _ -> ()
              )
   in
+  TcpServerSocket.set_rtimeout t 10.;
   NetLoop.main ()

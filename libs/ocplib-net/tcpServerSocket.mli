@@ -12,13 +12,8 @@ val create :
   'info t
 val close : 'info t -> close_reason -> unit
 
-                                   (*
-val set_rtimeout : t -> float -> unit
-val set_wtimeout : t -> float -> unit
-val set_lifetime : t -> float -> unit
-                                    *)
-
 val set_handler : 'info t -> 'info handler -> unit
+val set_rtimeout : 'info t -> float -> unit
 
 val handler : 'info t -> 'info handler
 val closed : 'info t -> bool

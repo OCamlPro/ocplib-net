@@ -12,6 +12,8 @@ type 'info handler = 'info t -> event -> unit
      name : string;
      info : 'info;
 
+     mutable last_read : float;
+     mutable rtimeout : float;
      mutable sockaddr : Unix.sockaddr;
      mutable handler : 'info handler;
      mutable nconnections : int;
@@ -68,6 +70,61 @@ let info t = t.info
 let inet_addr_loopback = Unix.inet_addr_of_string "127.0.0.1"
 
 let default_sockaddr = Unix.ADDR_INET(Unix.inet_addr_any, 0)
+
+
+let rec iter_accept t =
+  match t.sock with
+  | Closed _ ->
+     if debug then
+       Printf.eprintf
+         "Server socket closed. Not accepting connections anymore.\n%!";
+     Lwt.return ()
+  | Socket fd ->
+     (* Printf.eprintf "\titer_accept...\n%!"; *)
+     let accept_thread =
+       Lwt.bind (Lwt_unix.accept fd)
+                (fun (fd, sock_addr) ->
+                  t.last_read <- NetTimer.current_time ();
+                  if debug then
+                    Printf.eprintf "\tServer received connection...\n%!";
+                  Lwt.async (fun () ->
+                      t.nconnections <- t.nconnections + 1;
+                      exec_handler t (`CONNECTION (fd, sock_addr));
+                      Lwt.return ()
+                    );
+                  Lwt.return ()
+                )
+     in
+     let read_threads =
+       let delay = t.rtimeout -.
+                     (NetTimer.current_time () -. t.last_read)
+       in
+       let delay = min delay 1. in
+       (* Printf.eprintf "delay: %.1f\n%!" delay; *)
+       let delay = if delay < 0.01 then 0.01 else delay in
+       Lwt.catch (fun () -> Lwt_unix.timeout delay)
+                 (function
+                  | Lwt_unix.Timeout ->
+                     let time = NetTimer.current_time() in
+                     if t.last_read +. t.rtimeout < time then begin
+                         exec_handler t `RTIMEOUT;
+                         t.last_read <- time;
+                       end;
+                     Lwt.return ()
+                  | Lwt.Canceled ->
+                     Lwt.return ()
+                  | exn ->
+                     Printf.eprintf "TcpClientSocket.timeout: Exception %s\n%!"
+                                    (Printexc.to_string exn);
+                     Lwt.return ()
+                 )
+       :: [accept_thread]
+     in
+     Lwt.bind (Lwt.pick read_threads)
+              (fun () ->
+                iter_accept t
+              )
+
 let create ?(name="unknown")
            info
            sockaddr
@@ -80,6 +137,8 @@ let create ?(name="unknown")
   Lwt_unix.set_close_on_exec fd;
   Lwt_unix.setsockopt fd Unix.SO_REUSEADDR true;
 
+  let rtimeout = -1. in
+  let last_read = NetTimer.current_time () in
   let sock = Socket fd in
   let nconnections = 0 in
   let t = {
@@ -89,29 +148,10 @@ let create ?(name="unknown")
       info;
       handler;
       nconnections;
+      last_read;
+      rtimeout;
     } in
 
-  let rec iter_accept () =
-    match t.sock with
-    | Closed _ ->
-       if debug then
-         Printf.eprintf
-           "Server socket closed. Not accepting connections anymore.\n%!";
-       Lwt.return ()
-    | Socket fd ->
-       (* Printf.eprintf "\titer_accept...\n%!"; *)
-       Lwt.bind (Lwt_unix.accept fd)
-                (fun (fd, sock_addr) ->
-                  if debug then
-                    Printf.eprintf "\tServer received connection...\n%!";
-                  Lwt.async (fun () ->
-                      t.nconnections <- t.nconnections + 1;
-                      exec_handler t (`CONNECTION (fd, sock_addr));
-                      Lwt.return ()
-                    );
-                  iter_accept ()
-                )
-  in
 
   let bind_socket () =
     Lwt.bind
@@ -120,7 +160,7 @@ let create ?(name="unknown")
         Lwt_unix.listen fd 20;
         t.sockaddr <- Unix.getsockname (Lwt_unix.unix_file_descr fd);
         exec_handler t `ACCEPTING;
-        iter_accept ()
+        iter_accept t
       )
   in
   Lwt.async bind_socket;
@@ -136,11 +176,7 @@ let string_of_event (event : tcpServerEvent) =
   | #NetTypes.event as event -> NetUtils.string_of_event event
 
 (* val set_rtimeout : t -> float -> unit *)
-let set_rtimeout _ = assert false
-(* val set_wtimeout : t -> float -> unit *)
-let set_wtimeout _ = assert false
-(* val set_lifetime : t -> float -> unit *)
-let set_lifetime _ = assert false
+let set_rtimeout t rtimeout = t.rtimeout <- rtimeout
 
 let nconnections t = t.nconnections
 let sockaddr t = t.sockaddr

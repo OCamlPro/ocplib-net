@@ -182,7 +182,7 @@ module Timer : sig
 
   type t
   (* [create n f] calls [f] after [n] seconds. *)
-  val create : int -> (unit -> unit) -> t
+  val create : float -> (unit -> unit) -> t
   (* [stop t] prevents [t] from happening *)
   val stop : t -> unit
 

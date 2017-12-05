@@ -75,15 +75,25 @@ let add_bytes_from_read b fd n =
   (* Printf.eprintf "prepare_space_for_bytes (read): %d/%d/%d -> %d %d\n%!"
                  b.pos b.len (String.length b.buf) curpos n; *)
   Lwt.bind (Lwt.catch
-              (fun () -> Lwt_unix.read fd b.buf curpos n)
+              (fun () ->
+                (* Printf.eprintf "read: %d[%d,%d]\n%!"
+                               (String.length b.buf) curpos n; *)
+                Lwt_unix.read fd b.buf curpos n)
               (fun exn ->
-                Printf.eprintf "Lwt_unix.read: exception %s\n%!"
-                               (Printexc.to_string exn);
-                Lwt.return 0
+                match exn with
+                | Lwt.Canceled ->
+                   Lwt.return (-1)
+                | Unix.Unix_error(Unix.ECONNRESET,_,_) -> (* CLOSED *)
+                   Lwt.return 0
+                | _ ->
+                   Printf.eprintf "Lwt_unix.read: exception %s\n%!"
+                                  (Printexc.to_string exn);
+                   Lwt.return 0
            ))
            (fun nread ->
              (* Printf.eprintf "add_bytes_from_read PARTIAL\n%!"; *)
-             b.len <- b.len + nread;
+             if nread >= 0 then
+               b.len <- b.len + nread;
              Lwt.return nread
            )
 
@@ -108,18 +118,20 @@ let write b fd =
   Lwt.bind (Lwt.catch
               (fun () -> Lwt_unix.write fd b.buf b.pos b.len)
               (fun exn ->
-                begin
-                  match exn with
-                  | Unix.Unix_error(Unix.EPIPE, "write", "") -> ()
-                  | exn ->
-                     Printf.eprintf "Lwt_unix.write: exception %s\n%!"
-                                    (Printexc.to_string exn);
-                end;
-                Lwt.return 0
+                Lwt.return
+                  (match exn with
+                   | Unix.Unix_error(Unix.EPIPE, _, _) -> 0
+                   | Lwt.Canceled -> -1
+
+                   | exn ->
+                      Printf.eprintf "Lwt_unix.write: exception %s\n%!"
+                                     (Printexc.to_string exn);
+                      0)
               ))
            (fun nwritten ->
              (* Printf.eprintf "write PARTIAL\n%!"; *)
-             release_bytes b nwritten;
+             if nwritten > 0 then
+               release_bytes b nwritten;
              Lwt.return nwritten
            )
 

@@ -16,8 +16,7 @@ type 'info t = {
     mutable connecting : Unix.sockaddr option;
     mutable connected : bool;
 
-    mutable active_reader : bool;
-    mutable active_writer : bool;
+    mutable active : bool;
     mutable handler : 'info handler;
     mutable wbuf : TcpBuffer.t;
     mutable rbuf : TcpBuffer.t;
@@ -70,82 +69,13 @@ let set_handler t h = t.handler <- h
 
 
 
-let rec iter_write_actions t =
+let rec iter_actions t =
   match t.sock with
   | Closed _ -> Lwt.return ()
   | Socket fd ->
-     t.active_writer <- true;
-     let threads = [] in
-     let threads =
-       match t.connecting with
-       | Some _sockaddr -> threads
-       | None ->
-          if TcpBuffer.length t.wbuf > 0 then
-            Lwt.bind (TcpBuffer.write t.wbuf fd)
-                     (fun nwrite ->
-                       if nwrite = 0 then
-                         close t Closed_by_peer
-                       else begin
-                           t.nwritten <- t.nwritten + nwrite;
-                           exec_handler t `CAN_REFILL;
-                           if TcpBuffer.length t.wbuf = 0 then
-                             exec_handler t `WRITE_DONE;
-                         end;
-                       Lwt.return ()
-                     )
-            :: threads
-          else threads
-     in
-     let threads =
-       if threads != [] && t.wtimeout > 0. then begin
-           let delay = t.wtimeout -.
-                         (NetTimer.current_time () -. t.last_write)
-           in
-           (* Printf.eprintf "delay: %.1f\n%!" delay; *)
-           let delay = if delay < 0.01 then 0.01 else delay in
-           Lwt.catch (fun () -> Lwt_unix.timeout delay)
-                     (function
-                      | Lwt_unix.Timeout ->
-                         exec_handler t `WTIMEOUT;
-                         t.last_write <- NetTimer.current_time ();
-                         Lwt.return ()
-                      | Lwt.Canceled ->
-                         Lwt.return ()
-                      | exn ->
-                         Printf.eprintf
-                           "TcpClientSocket.timeout: Exception %s\n%!"
-                           (Printexc.to_string exn);
-                         Lwt.return ()
-                     )
-           :: threads
-         end
-       else threads
-     in
-     if threads = [] then begin
-         t.active_writer <- false;
-         (* Printf.eprintf "Nothing to write...\n%!"; *)
-         Lwt.return ()
-       end else begin
-         Lwt.bind
-           (Lwt.pick threads)
-           (fun () ->
-             iter_write_actions t)
-       end
+     t.active <- true;
 
-let activate_writer t =
-  (* Printf.eprintf "activate_writer...\n%!";  *)
-  if not t.active_writer then begin
-      t.active_writer <- true;
-      Lwt.async (fun () -> iter_write_actions t)
-    end
-
-let rec iter_read_actions t =
-  match t.sock with
-  | Closed _ -> Lwt.return ()
-  | Socket fd ->
-     t.active_reader <- true;
-     let threads = [] in
-     let threads =
+     let read_threads =
        match t.connecting with
        | Some sockaddr ->
           Lwt.catch
@@ -157,15 +87,14 @@ let rec iter_read_actions t =
                          t.last_write <- NetTimer.current_time ();
                          t.connected <- true;
                          exec_handler t `CONNECTED;
-                         activate_writer t;
                          Lwt.return ()
-                       ))
+            ))
             (fun exn ->
               t.connecting <- None;
               close t Closed_by_peer;
               Lwt.return ()
             )
-          :: threads
+          :: []
        | None ->
           if not t.connected then begin
               t.connected <- true;
@@ -180,19 +109,22 @@ let rec iter_read_actions t =
                 (* Printf.eprintf "nread: %d\n%!" nread; *)
                 if nread = 0 then
                   close t Closed_by_peer
-                else begin
+                else
+                  if nread > 0 then begin
                     t.last_read <- NetTimer.current_time ();
                     (* Printf.eprintf "last_read %.0f\n%!" t.last_read; *)
                     t.nread <- t.nread + nread;
                     exec_handler t (`READ_DONE nread);
-                  end;
+                    end else begin
+                      (* Canceled *)
+                    end;
                 Lwt.return ()
               )
-            :: threads
-          else threads
+            :: []
+          else []
      in
-     let threads =
-       if threads != [] && t.rtimeout > 0. then begin
+     let read_threads =
+       if read_threads != [] && t.rtimeout > 0. then begin
            let delay = t.rtimeout -.
                          (NetTimer.current_time () -. t.last_read)
            in
@@ -211,24 +143,72 @@ let rec iter_read_actions t =
                                         (Printexc.to_string exn);
                          Lwt.return ()
                      )
-           :: threads
+           :: read_threads
          end
-       else threads
+       else read_threads
      in
-     if threads = [] then begin
-         t.active_reader <- false;
-         Lwt.return ()
-       end else begin
+     let write_threads =
+       match t.connecting with
+       | Some _sockaddr -> []
+       | None ->
+          if TcpBuffer.length t.wbuf > 0 then
+            Lwt.bind (TcpBuffer.write t.wbuf fd)
+                     (fun nwrite ->
+                       if nwrite = 0 then
+                         close t Closed_by_peer
+                       else
+                         if nwrite > 0 then begin
+                           t.nwritten <- t.nwritten + nwrite;
+                           exec_handler t `CAN_REFILL;
+                           if TcpBuffer.length t.wbuf = 0 then
+                             exec_handler t `WRITE_DONE;
+                           end else begin
+                             (* Canceled *)
+                           end;
+                       Lwt.return ()
+                     )
+            :: []
+          else []
+     in
+     let write_threads =
+       if write_threads != [] && t.wtimeout > 0. then begin
+           let delay = t.wtimeout -.
+                         (NetTimer.current_time () -. t.last_write)
+           in
+           (* Printf.eprintf "delay: %.1f\n%!" delay; *)
+           let delay = if delay < 0.01 then 0.01 else delay in
+           Lwt.catch (fun () -> Lwt_unix.timeout delay)
+                     (function
+                      | Lwt_unix.Timeout ->
+                         exec_handler t `WTIMEOUT;
+                         t.last_write <- NetTimer.current_time ();
+                         Lwt.return ()
+                      | Lwt.Canceled -> Lwt.return ()
+                      | exn ->
+                         Printf.eprintf
+                           "TcpClientSocket.timeout: Exception %s\n%!"
+                           (Printexc.to_string exn);
+                         Lwt.return ()
+                     )
+           :: write_threads
+         end
+       else write_threads
+     in
+     match read_threads, write_threads with
+     | [], [] ->
+        t.active <- false;
+         (* Printf.eprintf "Nothing to write...\n%!"; *)
+        Lwt.return ()
+     | _ ->
          Lwt.bind
-           (Lwt.pick threads)
+           (Lwt.pick (read_threads @ write_threads))
            (fun () ->
-             iter_read_actions t)
-       end
+             iter_actions t)
 
-let activate_reader t =
-  if not t.active_reader then begin
-      t.active_reader <- true;
-      Lwt.async (fun () -> iter_read_actions t)
+let activate_thread t =
+  if not t.active then begin
+      t.active <- true;
+      Lwt.async (fun () -> iter_actions t)
     end
 
 (* val create : name:string -> Unix.file_descr -> handler -> t *)
@@ -240,8 +220,7 @@ let create ?(name="unknown") ?(max_buf_size = 1_000_000)
   let sock = Socket fd in
   let rbuf = TcpBuffer.create max_buf_size in
   let wbuf = TcpBuffer.create max_buf_size in
-  let active_reader = false in
-  let active_writer = false in
+  let active = false in
   let rtimeout = -1. in
   let wtimeout = -1. in
   let last_read = NetTimer.current_time () in
@@ -258,8 +237,7 @@ let create ?(name="unknown") ?(max_buf_size = 1_000_000)
       handler;
       connecting;
       connected;
-      active_reader;
-      active_writer;
+      active;
       last_read;
       rtimeout;
       last_write;
@@ -267,7 +245,7 @@ let create ?(name="unknown") ?(max_buf_size = 1_000_000)
       nread;
       nwritten;
     } in
-  activate_reader t;
+  activate_thread t;
   t
 
 
@@ -282,7 +260,7 @@ let create ?name ?max_buf_size info fd handler =
 (* val write : t -> string -> pos:int -> len:int -> unit *)
 let write t s ~pos ~len =
   TcpBuffer.add_bytes_from_string t.wbuf s pos len;
-  activate_writer t
+  activate_thread t
 
 let write_string t s =
   write t s ~pos:0 ~len:(String.length s)
@@ -298,12 +276,12 @@ let shutdown t reason =
 (* val set_rtimeout : t -> float -> unit *)
 let set_rtimeout t rtimeout =
   t.rtimeout <- rtimeout;
-  activate_reader t
+  activate_thread t
 
 (* val set_wtimeout : t -> float -> unit *)
 let set_wtimeout t wtimeout =
   t.wtimeout <- wtimeout;
-  activate_writer t
+  activate_thread t
 
 (* val set_lifetime : t -> float -> unit *)
 (*let set_lifetime _ = assert false *)
@@ -327,7 +305,7 @@ let release t n =
   TcpBuffer.release_bytes t.rbuf n
 let read t s pos len =
   TcpBuffer.read t.rbuf s pos len;
-  activate_reader t
+  activate_thread t
 let read_string t =
   let len = TcpBuffer.length t.rbuf in
   let s = Bytes.create len in
@@ -338,7 +316,7 @@ let wlength t = TcpBuffer.length t.wbuf
 let get t pos = TcpBuffer.get t.rbuf pos
 let release_bytes t n =
   TcpBuffer.release_bytes t.rbuf n;
-  activate_reader t
+  activate_thread t
 
 let nwritten t = t.nwritten
 let nread t = t.nread
