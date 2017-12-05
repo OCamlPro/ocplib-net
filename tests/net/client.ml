@@ -11,8 +11,7 @@ let () =
                              (TcpClientSocket.string_of_event event);
               match event with
               | `RTIMEOUT
-                | `WTIMEOUT
-                | `LTIMEOUT -> ()
+                | `WTIMEOUT -> ()
               | `READ_DONE _nread ->
                  let s = TcpClientSocket.read_string t in
                  Printf.printf "Received: %S\n%!" s;

@@ -16,7 +16,6 @@ let string_of_event (t : event) =
   match t with
   | `CLOSED s -> Printf.sprintf "CLOSED %s" (string_of_close_reason s)
   | `RTIMEOUT -> "RTIMEOUT"
-  | `LTIMEOUT -> "LTIMEOUT"
   | `WTIMEOUT -> "WTIMEOUT"
 
 let string_of_sockaddr = function

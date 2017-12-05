@@ -17,7 +17,6 @@ type event =
   | `CLOSED of close_reason
   | `RTIMEOUT  (* called after a timeout on reading *)
   | `WTIMEOUT  (* called after a timeout on writing *)
-  | `LTIMEOUT  (* called after a timeout on lifetime *)
   ]
 
 type tcpSocketEvent = [
