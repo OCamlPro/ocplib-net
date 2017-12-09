@@ -1,0 +1,6 @@
+
+
+OCaml.program("ocp-net-udp", ocaml + {
+                             files = ' udp.ml;
+                             requires = ' ocplib-net;
+                             });

@@ -36,6 +36,7 @@ let exec_handler t event =
 (* val close : t -> close_reason -> unit *)
 let close t reason =
   match t.sock with
+  | Closing _
   | Closed _ -> ()
   | Socket fd ->
      t.sock <- Closed reason;
@@ -50,6 +51,7 @@ let close t reason =
 let closed t =
   match t.sock with
   | Socket _ -> false
+  | Closing _
   | Closed _ -> true
 
 (* val handler : t -> handler *)
@@ -74,7 +76,9 @@ let default_sockaddr = Unix.ADDR_INET(Unix.inet_addr_any, 0)
 
 let rec iter_accept t =
   match t.sock with
-  | Closed _ ->
+  | Closed _
+    | Closing _
+    ->
      if debug then
        Printf.eprintf
          "Server socket closed. Not accepting connections anymore.\n%!";
@@ -129,11 +133,11 @@ let create ?(name="unknown")
            info
            sockaddr
            handler =
-  let protocol = match sockaddr with
+  let domain = match sockaddr with
     | Unix.ADDR_INET _ -> Unix.PF_INET
     | Unix.ADDR_UNIX _ -> Unix.PF_UNIX
   in
-  let fd = Lwt_unix.socket protocol Unix.SOCK_STREAM 0 in
+  let fd = Lwt_unix.socket domain Unix.SOCK_STREAM 0 in
   Lwt_unix.set_close_on_exec fd;
   Lwt_unix.setsockopt fd Unix.SO_REUSEADDR true;
 
@@ -176,7 +180,7 @@ let string_of_event (event : tcpServerEvent) =
   | #NetTypes.event as event -> NetUtils.string_of_event event
 
 (* val set_rtimeout : t -> float -> unit *)
-let set_rtimeout t rtimeout = t.rtimeout <- rtimeout
+let set_rtimeout t rtimeout = t.rtimeout <- float_of_int rtimeout
 
 let nconnections t = t.nconnections
 let sockaddr t = t.sockaddr

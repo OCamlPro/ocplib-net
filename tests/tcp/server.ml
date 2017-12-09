@@ -43,7 +43,7 @@ let () =
                                 | _ -> ()
                               )
                     in
-                    TcpClientSocket.set_rtimeout t 5.;
+                    TcpClientSocket.set_rtimeout t 5;
                     ()
                | `CLOSED _reason -> exit 0
                | `ACCEPTING ->
@@ -57,5 +57,5 @@ let () =
                | _ -> ()
              )
   in
-  TcpServerSocket.set_rtimeout t 10.;
+  TcpServerSocket.set_rtimeout t 10;
   NetLoop.main ()

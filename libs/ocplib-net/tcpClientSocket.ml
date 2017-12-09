@@ -4,6 +4,7 @@ open NetTypes
 (* BufferOverflow (previous_len, added_len, max_len) *)
 exception BufferWriteOverflow = TcpBuffer.BufferWriteOverflow
 exception BufferReadOverflow = TcpBuffer.BufferReadOverflow
+exception InvalidSocketOperation
 
 type event = tcpSocketEvent
 
@@ -14,9 +15,8 @@ type 'info t = {
     info : 'info;
 
     mutable connecting : Unix.sockaddr option;
-    mutable connected : bool;
+    mutable connected : Unix.sockaddr option;
 
-    mutable active : bool;
     mutable handler : 'info handler;
     mutable wbuf : TcpBuffer.t;
     mutable rbuf : TcpBuffer.t;
@@ -28,6 +28,9 @@ type 'info t = {
     mutable nwritten : int;
     mutable last_write : float;
     mutable wtimeout : float;
+
+    events : event Queue.t;
+    mutable wakener : unit Lwt.u option;
   }
 
 and 'info handler = 'info t -> event -> unit
@@ -41,40 +44,101 @@ let exec_handler t event =
     Printf.eprintf "TcpServerSocket: exception %S in handler\n%!"
                    (Printexc.to_string exn)
 
+let activate_thread t =
+  match t.wakener with
+  | None -> () (* Not useful, the thread is already awake *)
+  | Some u ->
+     Printf.eprintf "wakeup\n%!";
+     Lwt.wakeup u ();
+     t.wakener <- None
+
 (* val close : t -> close_reason -> unit *)
 let close t reason =
   match t.sock with
   | Closed _ -> ()
+  | Closing (_fd, _reason) -> ()
   | Socket fd ->
-     t.sock <- Closed reason;
-     Lwt.async (fun () ->
-         Lwt.bind (Lwt_unix.close fd)
-                  (fun () ->
-                    exec_handler t (`CLOSED reason);
-                    Lwt.return ()
-                  ))
+     t.sock <- Closing (fd, reason);
+     activate_thread t
 
 (* val closed : t -> bool *)
 let closed t =
   match t.sock with
   | Socket _ -> false
+  | Closing _
   | Closed _ -> true
 
 (* val handler : t -> handler *)
 let handler t = t.handler
 (* val set_handler : t -> handler -> unit *)
 let set_handler t h = t.handler <- h
+let set_reader t f =
+  let handler = t.handler in
+  set_handler t
+              (fun t event ->
+                match event with
+                | `READ_DONE nread ->
+                   f t nread
+                | event -> handler t event
+              )
+let set_closer t f =
+  let handler = t.handler in
+  set_handler t
+              (fun t event ->
+                match event with
+                | `CLOSED reason ->
+                   f t reason
+                | event -> handler t event
+              )
+
+let sockaddr t =
+  match t.connected with
+  | None -> raise InvalidSocketOperation
+  | Some sockaddr -> sockaddr
+
+let set_connected t f =
+  let handler = t.handler in
+  set_handler t
+              (fun t event ->
+                match event with
+                | `CONNECTED ->
+                   f t (sockaddr t)
+                | event -> handler t event
+              )
 
 
+let queue_event t event =
+  Queue.add event t.events
 
+let exec_events t =
+  while not (Queue.is_empty t.events) do
+    let event = Queue.take t.events in
+    exec_handler t event;
+    match event with
+    | `CAN_REFILL ->
+       if TcpBuffer.length t.wbuf = 0 then
+         exec_handler t `WRITE_DONE;
+    | _ -> ()
+  done
 
-
-let rec iter_actions t =
+let rec iter_socket t =
+  t.wakener <- None;
   match t.sock with
-  | Closed _ -> Lwt.return ()
-  | Socket fd ->
-     t.active <- true;
+  | Closing (fd, reason) ->
+     t.sock <- Closed reason;
+     exec_handler t (`CLOSED reason);
+     Lwt.catch (fun () ->
+         Lwt.bind (Lwt_unix.close fd)
+                  (fun () ->
+                    Lwt.return ()
+       ))
+               (fun exn ->
+                 Lwt.return ()
+               )
 
+  | Closed reason ->
+     Lwt.return ()
+  | Socket fd ->
      let read_threads =
        match t.connecting with
        | Some sockaddr ->
@@ -85,21 +149,27 @@ let rec iter_actions t =
                          t.connecting <- None;
                          t.last_read <- NetTimer.current_time ();
                          t.last_write <- NetTimer.current_time ();
-                         t.connected <- true;
-                         exec_handler t `CONNECTED;
+                         t.connected <- Some (Lwt_unix.getpeername fd);
+                         queue_event t `CONNECTED;
                          Lwt.return ()
             ))
             (fun exn ->
-              t.connecting <- None;
-              close t Closed_by_peer;
-              Lwt.return ()
+              match exn with
+              | Lwt.Canceled -> Lwt.return ()
+              | exn ->
+                 Printf.eprintf "Exception %s in connect\n%!"
+                                (Printexc.to_string exn);
+                 close t (Closed_for_exception exn);
+                 Lwt.return ()
             )
           :: []
        | None ->
-          if not t.connected then begin
-              t.connected <- true;
-              exec_handler t `CONNECTED;
-            end;
+          begin match t.connected with
+          | None ->
+             t.connected <- Some (Lwt_unix.getpeername fd);
+             queue_event t `CONNECTED;
+          | Some _sockaddr -> ()
+          end;
           if TcpBuffer.can_refill t.rbuf then
             Lwt.bind
               (TcpBuffer.add_bytes_from_read
@@ -111,12 +181,10 @@ let rec iter_actions t =
                   close t Closed_by_peer
                 else
                   if nread > 0 then begin
-                    t.last_read <- NetTimer.current_time ();
-                    (* Printf.eprintf "last_read %.0f\n%!" t.last_read; *)
-                    t.nread <- t.nread + nread;
-                    exec_handler t (`READ_DONE nread);
-                    end else begin
-                      (* Canceled *)
+                      t.last_read <- NetTimer.current_time ();
+                      (* Printf.eprintf "last_read %.0f\n%!" t.last_read; *)
+                      t.nread <- t.nread + nread;
+                      queue_event t (`READ_DONE nread);
                     end;
                 Lwt.return ()
               )
@@ -133,7 +201,7 @@ let rec iter_actions t =
            Lwt.catch (fun () -> Lwt_unix.timeout delay)
                      (function
                       | Lwt_unix.Timeout ->
-                         exec_handler t `RTIMEOUT;
+                         queue_event t `RTIMEOUT;
                          t.last_read <- NetTimer.current_time ();
                          Lwt.return ()
                       | Lwt.Canceled ->
@@ -158,12 +226,8 @@ let rec iter_actions t =
                          close t Closed_by_peer
                        else
                          if nwrite > 0 then begin
-                           t.nwritten <- t.nwritten + nwrite;
-                           exec_handler t `CAN_REFILL;
-                           if TcpBuffer.length t.wbuf = 0 then
-                             exec_handler t `WRITE_DONE;
-                           end else begin
-                             (* Canceled *)
+                             t.nwritten <- t.nwritten + nwrite;
+                             queue_event t `CAN_REFILL;
                            end;
                        Lwt.return ()
                      )
@@ -180,7 +244,7 @@ let rec iter_actions t =
            Lwt.catch (fun () -> Lwt_unix.timeout delay)
                      (function
                       | Lwt_unix.Timeout ->
-                         exec_handler t `WTIMEOUT;
+                         queue_event t `WTIMEOUT;
                          t.last_write <- NetTimer.current_time ();
                          Lwt.return ()
                       | Lwt.Canceled -> Lwt.return ()
@@ -194,22 +258,15 @@ let rec iter_actions t =
          end
        else write_threads
      in
-     match read_threads, write_threads with
-     | [], [] ->
-        t.active <- false;
-         (* Printf.eprintf "Nothing to write...\n%!"; *)
-        Lwt.return ()
-     | _ ->
-         Lwt.bind
-           (Lwt.pick (read_threads @ write_threads))
-           (fun () ->
-             iter_actions t)
-
-let activate_thread t =
-  if not t.active then begin
-      t.active <- true;
-      Lwt.async (fun () -> iter_actions t)
-    end
+     let wakener_thread, wakener_handler = Lwt.wait () in
+     t.wakener <- Some wakener_handler;
+     let threads = wakener_thread :: read_threads @ write_threads in
+     Lwt.bind
+       (Lwt.pick threads)
+       (fun () ->
+         t.wakener <- None;
+         exec_events t;
+         iter_socket t)
 
 (* val create : name:string -> Unix.file_descr -> handler -> t *)
 let create ?(name="unknown") ?(max_buf_size = 1_000_000)
@@ -220,14 +277,15 @@ let create ?(name="unknown") ?(max_buf_size = 1_000_000)
   let sock = Socket fd in
   let rbuf = TcpBuffer.create max_buf_size in
   let wbuf = TcpBuffer.create max_buf_size in
-  let active = false in
   let rtimeout = -1. in
   let wtimeout = -1. in
   let last_read = NetTimer.current_time () in
   let last_write = NetTimer.current_time () in
   let nread = 0 in
   let nwritten = 0 in
-  let connected = false in
+  let connected = None in
+  let events = Queue.create () in
+  let wakener = None in
   let t = {
       name;
       sock;
@@ -237,15 +295,16 @@ let create ?(name="unknown") ?(max_buf_size = 1_000_000)
       handler;
       connecting;
       connected;
-      active;
       last_read;
       rtimeout;
       last_write;
       wtimeout;
       nread;
       nwritten;
+      events;
+      wakener;
     } in
-  activate_thread t;
+  Lwt.async (fun () -> iter_socket t);
   t
 
 
@@ -268,19 +327,20 @@ let write_string t s =
 (* val shutdown : t -> close_reason -> unit *)
 let shutdown t reason =
   match t.sock with
-  | Closed _ -> ()
+  | Closed _
+    | Closing _ -> ()
   | Socket fd ->
      Lwt_unix.shutdown fd Lwt_unix.SHUTDOWN_ALL;
      close t reason
 
 (* val set_rtimeout : t -> float -> unit *)
 let set_rtimeout t rtimeout =
-  t.rtimeout <- rtimeout;
+  t.rtimeout <- float_of_int rtimeout;
   activate_thread t
 
 (* val set_wtimeout : t -> float -> unit *)
 let set_wtimeout t wtimeout =
-  t.wtimeout <- wtimeout;
+  t.wtimeout <- float_of_int wtimeout;
   activate_thread t
 
 (* val set_lifetime : t -> float -> unit *)

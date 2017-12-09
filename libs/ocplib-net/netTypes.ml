@@ -10,6 +10,7 @@ type close_reason =
 
 type socket =
   | Socket of Lwt_unix.file_descr
+  | Closing of Lwt_unix.file_descr * close_reason
   | Closed of close_reason
 
 type event =
@@ -31,3 +32,15 @@ type tcpServerEvent = [
   | `ACCEPTING
   | `CONNECTION of Lwt_unix.file_descr * Unix.sockaddr
   | event ]
+
+type udpSocketEvent = [
+  | `ACCEPTING
+  | `WRITE_DONE
+  | `CAN_REFILL
+  | `READ_DONE
+  | event ]
+
+type message = {
+    msg_content : string;
+    msg_sockaddr : Unix.sockaddr;
+  }
