@@ -24,3 +24,10 @@ let string_of_sockaddr = function
                     (Unix.string_of_inet_addr addr) port
   | Unix.ADDR_UNIX s ->
      Printf.sprintf "ADDR_UNIX %S" s
+
+let random_string n =
+  let b = Bytes.create n in
+  for i = 0 to n - 1 do
+    Bytes.set b i (char_of_int (Random.int 256))
+  done;
+  Bytes.to_string b

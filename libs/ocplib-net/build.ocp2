@@ -16,15 +16,18 @@ OCaml.library("ocplib-net",
                (* network utils *)
                netTypes.ml
                netUtils.ml
+               netHex.ml
+               netProto.ml (* LittleEndian encode/decode helpers *)
 
                (* lower interfaces *)
                sockaddr.ml
                tcpClientSocket.ml tcpServerSocket.ml
                udpSocket.ml
-
+               
                (* higher interfaces *)
                concur.ml
                netP2P.ml (* TODO: not finished *)
+
              ];
     requires = '[ ocplib-compat lwt.unix ocplib-endian ];
   });
