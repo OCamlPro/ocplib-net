@@ -5,7 +5,7 @@ let () =
 
   let t = TcpClientSocket.connect
             ()
-            (Unix.ADDR_INET(Unix.inet_addr_of_string "127.0.0.1", 40_000))
+            (Sockaddr.of_ip "127.0.0.1" 40_000)
             (fun t event ->
               Printf.eprintf "client: event %s\n%!"
                              (TcpClientSocket.string_of_event event);
@@ -13,7 +13,7 @@ let () =
               | `RTIMEOUT
                 | `WTIMEOUT -> ()
               | `READ_DONE _nread ->
-                 let s = TcpClientSocket.read_string t in
+                 let s = TcpClientSocket.read_all t in
                  Printf.printf "Received: %S\n%!" s;
                  TcpClientSocket.close t Closed_by_user
               | `CONNECTED -> ()

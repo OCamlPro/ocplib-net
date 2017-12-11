@@ -1,6 +1,6 @@
 
 
-
+open NetTypes
 
 module StringMap = Map.Make(String)
 
@@ -250,18 +250,19 @@ module MakeNetwork ( M : sig
       let (m, msg) = parse_message msg pos in
       do_handler c m msg
 
-(* TODO
-
-    let read_cut_messages c b nread =
+    let read_cut_messages c t nread =
       let rec iter () =
-        if b.len >= 4 then
-          let msg_len, pos = NetProto.get_int31 b.buf b.pos in
-          if b.len >= 4 + msg_len then
-            let s = String.sub b.buf pos msg_len in
-            buf_used b (msg_len + 4);
-
+        let buflen = TcpClientSocket.rlength t in
+        if buflen >= 4 then
+          let s = Bytes.create 4 in
+          TcpClientSocket.blit t 0 s 0 4;
+          let msg_len, pos = NetProto.get_int31 s 0 in
+          if buflen >= 4 + msg_len then begin
+            TcpClientSocket.release t 4;
+            let s = TcpClientSocket.read_string t msg_len in
             receiver_parse_message c s 0;
             iter ()
+            end
       in
       iter ()
 
@@ -284,14 +285,14 @@ module MakeNetwork ( M : sig
 
 
     let sock_reader c sock nread =
-      client_reader c (TcpSocket.buf sock) nread
+      client_reader c sock nread
 
     let sock_closer c _ reason  =
       (match c.conn_sock with
           None -> ()
         | Some sock ->
             c.conn_sock <- None;
-            TcpSocket.close sock reason);
+            TcpClientSocket.close sock reason);
       (match c.conn_peer with
           None -> ()
         | Some p ->
@@ -306,7 +307,7 @@ module MakeNetwork ( M : sig
       );
       c.conn_state  <- DISCONNECTED
 
-    let sock_connected c sock =
+    let sock_connected c sock sockaddr =
       c.conn_state <- CONNECTED
 
 
@@ -321,7 +322,7 @@ module MakeNetwork ( M : sig
                 Printf.eprintf "Sending message to peer %s"
                   (NetHex.of_string (M.peer_id p))
           end;
-          TcpSocket.write_string sock (netstring_of_message msg content)
+          TcpClientSocket.write_string sock (netstring_of_message msg content)
 
     let send_id c =
       connection_send c ConnectingMsg.msg {
@@ -335,33 +336,40 @@ module MakeNetwork ( M : sig
           conn_addr = (from_ip, from_port);
           conn_state = CONNECTING;
         } in
-      TcpSocket.set_reader sock (sock_reader c);
-      TcpSocket.set_closer sock (sock_closer c);
-      TcpSocket.set_rtimeout sock 30;
-      TcpSocket.set_lifetime sock 120;
-      TcpSocket.set_connected sock (sock_connected c);
+      TcpClientSocket.set_reader sock (sock_reader c);
+      TcpClientSocket.set_closer sock (sock_closer c);
+      TcpClientSocket.set_rtimeout sock 30;
+      (* TcpClientSocket.set_lifetime sock 120; *)
+      TcpClientSocket.set_connected sock (sock_connected c);
       send_id c;
       c
 
     let bind_port port =
       let event_handler t event =
         match event with
-          TcpServerSocket.CONNECTION (s, Unix.ADDR_INET(from_ip, from_port)) ->
-
-            let from_ip = Ip.of_inet_addr from_ip in
+        | `CONNECTION (fd, sockaddr) ->
+           let from_ip, from_port =
+             match sockaddr with
+             | Unix.ADDR_INET(from_ip, from_port) ->
+                      NetUtils.string_of_inet_addr from_ip, from_port
+             | _ -> assert false
+           in
             Printf.eprintf "New Incoming Connecting from %s:%d"
               (string_of_ip from_ip) from_port;
 
-            let token = create_token unlimited_connection_manager in
-            let sock = TcpSocket.create
-                token "client-helper connection" s in
+            let sock = TcpClientSocket.create
+                         ~name:"client-helper connection" () fd
+                         (fun _t _event -> ()) in
             let _c = init_connection sock None from_ip from_port in
             ()
         | _ -> ()
 
       in
-      TcpServerSocket.create "server"
-        Unix.inet_addr_any port event_handler
+      let (_t : unit TcpServerSocket.t) =
+        TcpServerSocket.create ~name:"server" ()
+                               (Sockaddr.any port) event_handler
+      in
+      ()
 
     let disconnect p =
       match M.peer_connection p with
@@ -370,6 +378,7 @@ module MakeNetwork ( M : sig
           Printf.eprintf "NetP2P.disconnect called";
           sock_closer c () Closed_by_user
 
+                      (*
 (* TODO: garbage collect !peers_by_id *)
     let new_peer peer_id addr =
       try
@@ -518,10 +527,9 @@ module MakeNetwork ( M : sig
           if c.conn_state = IDENTIFIED then
             connection_send c msg content
 
+                       *)
 
-    let get_peer id = Sha1Map.find id !peers_by_id
+    let get_peer id = StringMap.find id !peers_by_id
     let iter_peers f =
-      Sha1Map.iter (fun _ p -> f p) !peers_by_id
- *)
-
+      StringMap.iter (fun _ p -> f p) !peers_by_id
   end

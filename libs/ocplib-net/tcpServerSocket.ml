@@ -17,6 +17,8 @@ type 'info handler = 'info t -> event -> unit
      mutable sockaddr : Unix.sockaddr;
      mutable handler : 'info handler;
      mutable nconnections : int;
+     events : event Queue.t;
+     mutable wakener : unit Lwt.u option;
    }
 
 let exec_handler t event =
@@ -27,25 +29,23 @@ let exec_handler t event =
                    (Printexc.to_string exn)
 
 
-
-
-
-
+let activate_thread t =
+  match t.wakener with
+  | None -> () (* Not useful, the thread is already awake *)
+  | Some u ->
+     Printf.eprintf "wakeup\n%!";
+     NetLoop.wakeup u;
+     t.wakener <- None
 
 
 (* val close : t -> close_reason -> unit *)
 let close t reason =
   match t.sock with
-  | Closing _
   | Closed _ -> ()
+  | Closing (_fd, _reason) -> ()
   | Socket fd ->
-     t.sock <- Closed reason;
-     Lwt.async (fun () ->
-         Lwt.bind (Lwt_unix.close fd)
-                  (fun () ->
-                    exec_handler t (`CLOSED reason);
-                    Lwt.return ()
-                  ))
+     t.sock <- Closing (fd, reason);
+     activate_thread t
 
 (* val closed : t -> bool *)
 let closed t =
@@ -62,27 +62,34 @@ let set_handler t h = t.handler <- h
 let info t = t.info
 
 
+let queue_event t event =
+  Queue.add event t.events
 
+let exec_events t =
+  while not (Queue.is_empty t.events) do
+    let event = Queue.take t.events in
+    exec_handler t event;
+  done
 
-
-
-
-
-
-let inet_addr_loopback = Unix.inet_addr_of_string "127.0.0.1"
-
-let default_sockaddr = Unix.ADDR_INET(Unix.inet_addr_any, 0)
 
 
 let rec iter_accept t =
+  t.wakener <- None;
   match t.sock with
-  | Closed _
-    | Closing _
-    ->
-     if debug then
-       Printf.eprintf
-         "Server socket closed. Not accepting connections anymore.\n%!";
-     Lwt.return ()
+  | Closing (fd, reason) ->
+     t.sock <- Closed reason;
+     let on_close () =
+       exec_handler t (`CLOSED reason);
+       Lwt.return_unit
+     in
+     Lwt.catch
+       (fun () ->
+         Lwt.bind (Lwt_unix.close fd) on_close
+       )
+       (fun exn -> on_close ())
+
+  | Closed _ -> Lwt.return_unit
+
   | Socket fd ->
      (* Printf.eprintf "\titer_accept...\n%!"; *)
      let accept_thread =
@@ -91,12 +98,9 @@ let rec iter_accept t =
                   t.last_read <- NetTimer.current_time ();
                   if debug then
                     Printf.eprintf "\tServer received connection...\n%!";
-                  Lwt.async (fun () ->
-                      t.nconnections <- t.nconnections + 1;
-                      exec_handler t (`CONNECTION (fd, sock_addr));
-                      Lwt.return ()
-                    );
-                  Lwt.return ()
+                  t.nconnections <- t.nconnections + 1;
+                  queue_event t (`CONNECTION (fd, sock_addr));
+                  Lwt.return_unit
                 )
      in
      let read_threads =
@@ -111,23 +115,28 @@ let rec iter_accept t =
                   | Lwt_unix.Timeout ->
                      let time = NetTimer.current_time() in
                      if t.last_read +. t.rtimeout < time then begin
-                         exec_handler t `RTIMEOUT;
+                         queue_event t `RTIMEOUT;
                          t.last_read <- time;
                        end;
-                     Lwt.return ()
+                     Lwt.return_unit
                   | Lwt.Canceled ->
-                     Lwt.return ()
+                     Lwt.return_unit
                   | exn ->
                      Printf.eprintf "TcpClientSocket.timeout: Exception %s\n%!"
                                     (Printexc.to_string exn);
-                     Lwt.return ()
+                     Lwt.return_unit
                  )
        :: [accept_thread]
      in
-     Lwt.bind (Lwt.pick read_threads)
-              (fun () ->
-                iter_accept t
-              )
+     let wakener_thread, wakener_handler = Lwt.wait () in
+     t.wakener <- Some wakener_handler;
+     let threads = wakener_thread :: read_threads in
+     Lwt.bind
+       (Lwt.pick threads)
+       (fun () ->
+         t.wakener <- None;
+         exec_events t;
+         iter_accept t)
 
 let create ?(name="unknown")
            info
@@ -145,6 +154,8 @@ let create ?(name="unknown")
   let last_read = NetTimer.current_time () in
   let sock = Socket fd in
   let nconnections = 0 in
+  let events = Queue.create () in
+  let wakener = None in
   let t = {
       sock;
       name;
@@ -154,6 +165,8 @@ let create ?(name="unknown")
       nconnections;
       last_read;
       rtimeout;
+      events;
+      wakener;
     } in
 
 
@@ -167,7 +180,7 @@ let create ?(name="unknown")
         iter_accept t
       )
   in
-  Lwt.async bind_socket;
+  NetLoop.defer bind_socket;
   t
 
 

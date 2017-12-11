@@ -35,7 +35,7 @@ let () =
                                      t
                                      (Printf.sprintf "READ %d\n" !counter);
                                    (* Printf.eprintf "read_string ...\n%!";*)
-                                   let _s = TcpClientSocket.read_string t in
+                                   let _s = TcpClientSocket.read_all t in
                                    (* Printf.eprintf "read_string DONE ...\n%!"; *)
                                    ()
                                 | `RTIMEOUT ->

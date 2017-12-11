@@ -18,6 +18,9 @@ let string_of_event (t : event) =
   | `RTIMEOUT -> "RTIMEOUT"
   | `WTIMEOUT -> "WTIMEOUT"
 
+let string_of_inet_addr addr =
+  Unix.string_of_inet_addr addr
+
 let string_of_sockaddr = function
   | Unix.ADDR_INET (addr, port) ->
      Printf.sprintf "ADDR_INET(%s, %d)"

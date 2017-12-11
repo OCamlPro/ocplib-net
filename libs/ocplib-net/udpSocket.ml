@@ -55,8 +55,7 @@ let activate_thread t =
   match t.wakener with
   | None -> () (* Not useful, the thread is already awake *)
   | Some u ->
-     Printf.eprintf "wakeup\n%!";
-     Lwt.wakeup u ();
+     NetLoop.wakeup u;
      t.wakener <- None
 
 (* val close : t -> close_reason -> unit *)
@@ -107,13 +106,13 @@ let rec iter_socket t =
      Lwt.catch (fun () ->
          Lwt.bind (Lwt_unix.close fd)
                   (fun () ->
-                    Lwt.return ()
+                    Lwt.return_unit
        ))
                (fun exn ->
-                 Lwt.return ()
+                 Lwt.return_unit
                )
 
-  | Closed _ -> Lwt.return ()
+  | Closed _ -> Lwt.return_unit
   | Socket fd ->
 
      let read_threads = [] in
@@ -131,7 +130,7 @@ let rec iter_socket t =
                         t.rsize <- t.rsize + nread;
                         queue_event t `READ_DONE;
                       end;
-                    Lwt.return ()
+                    Lwt.return_unit
                   ) :: read_threads
        else
          read_threads
@@ -148,13 +147,13 @@ let rec iter_socket t =
                       | Lwt_unix.Timeout ->
                          queue_event t `RTIMEOUT;
                          t.last_read <- NetTimer.current_time ();
-                         Lwt.return ()
+                         Lwt.return_unit
                       | Lwt.Canceled ->
-                         Lwt.return ()
+                         Lwt.return_unit
                       | exn ->
                          Printf.eprintf "TcpClientSocket.timeout: Exception %s\n%!"
                                         (Printexc.to_string exn);
-                         Lwt.return ()
+                         Lwt.return_unit
                      )
            :: read_threads
          end
@@ -177,7 +176,7 @@ let rec iter_socket t =
                         t.wsize <- t.wsize - String.length u.msg_content;
                         queue_event t `CAN_REFILL;
                       end;
-                    Lwt.return ()
+                    Lwt.return_unit
                   ) :: write_threads
        else
          write_threads
@@ -254,10 +253,10 @@ let create info sockaddr handler =
               (fun exn ->
                 Printf.eprintf "UdpSocket: exception in bind %s\n%!"
                                (Printexc.to_string exn);
-                Lwt.return () (* TODO: what shall we do *)
+                Lwt.return_unit (* TODO: what shall we do *)
               )
   in
-  Lwt.async bind_socket;
+  NetLoop.defer bind_socket;
   t
 
 let read t =

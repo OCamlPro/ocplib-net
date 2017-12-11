@@ -13,13 +13,16 @@ type 'info t
 type event = tcpSocketEvent
 type 'info handler = 'info t -> event -> unit
 
-
+(* Is it possible to miss an event if we do not provide the final event
+immediately ? Is-it possible for an event to be received before the end
+of create ? *)
 val create : ?name:string ->
              ?max_buf_size: int ->
              'info ->
              Lwt_unix.file_descr ->
              'info handler ->
              'info t
+
 val connect: ?name:string ->
              ?max_buf_size:int ->
              'info ->
@@ -37,7 +40,12 @@ val set_rtimeout : 'info t -> int -> unit
 val set_wtimeout : 'info t -> int -> unit
 
 val set_handler : 'info t -> 'info handler -> unit
-(* specialized versions of set_handler: *)
+(* specialized versions of set_handler: do not use for now. Indeed, we
+have to be sure first that the we cannot miss events between
+`TcpClientSocket.create` and `TcpClientSocket.set_reader`. Maybe we should
+not use `Lwt.async` in `create`, but use our own async scheduler in
+`NetLoop.main`.
+ *)
 val set_closer : 'a t -> ('a t -> NetTypes.close_reason -> unit) -> unit
 val set_connected : 'a t -> ('a t -> Unix.sockaddr -> unit) -> unit
 val set_reader : 'a t -> ('a t -> int -> unit) -> unit
@@ -50,7 +58,8 @@ val string_of_event : NetTypes.tcpSocketEvent -> string
 val blit : 'info t -> int -> string -> int -> int -> unit
 val release : 'info t -> int -> unit
 val read : 'info t -> string -> int -> int -> unit
-val read_string : 'info t -> string
+val read_all : 'info t -> string
+val read_string : 'info t -> int -> string
 val rlength : 'info t -> int
 val wlength : 'info t -> int
 val get : 'info t -> int -> char
