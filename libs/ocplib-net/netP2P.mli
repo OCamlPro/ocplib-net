@@ -1,3 +1,13 @@
+(**************************************************************************)
+(*                                                                        *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
+(*                                                                        *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
+(*                                                                        *)
+(**************************************************************************)
+
 (*
   Let's give a template of code:
 
@@ -74,6 +84,8 @@ type 'a connection
   }
  *)
 
+val random_peer_id : unit -> string
+
 module MakeNetwork :
 functor
   (M : sig
@@ -83,7 +95,7 @@ functor
      val peer_connection : peer -> peer connection option
      val set_peer_connection :
        peer -> peer connection option -> unit
-     val peer_address : peer -> (peer_ip * int) option
+     val peer_addr : peer -> (peer_ip * int) option
      val protocol_name : string
    end) ->
 sig
@@ -96,25 +108,21 @@ sig
   val declare_handler :
     ('a, peer) message_type -> (peer -> 'a -> unit) -> unit
 
-                                                         (*
+
   val send : peer -> ('a, peer) message_type -> 'a -> unit
 
   val new_peer : peer_id -> (peer_ip * int) option -> peer
   val connect : peer -> unit
   val connect_addr : peer_ip -> int -> unit
   val disconnect : peer -> unit
-  val bind_port : int -> unit TcpServerSocket.t
-                                                          *)
+  val bind_port : int -> unit
   val set_my_port : int -> unit
   val set_my_id : peer_id -> unit
   val get_my_id : unit -> peer_id
   val peer_state : peer -> connection_state
 
-                             (*
   val set_rtimeout : peer -> int -> unit
-  val set_lifetime : peer -> int -> unit
   val set_max_output_buffer : peer -> int -> unit
-                              *)
 
   module IdentifiedMsg :
   sig
@@ -131,9 +139,7 @@ sig
   module MakeUnitMsg : functor (M : sig val name : string end) ->
                        sig type t = unit val msg : (unit, 'a) message_type end
 
-                         (*
   val iter_peers : (peer -> unit) -> unit
   val get_peer : peer_id -> peer
-                          *)
 
 end

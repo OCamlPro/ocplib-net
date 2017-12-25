@@ -1,3 +1,13 @@
+(**************************************************************************)
+(*                                                                        *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
+(*                                                                        *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
+(*                                                                        *)
+(**************************************************************************)
+
 open NetTypes
 
 let count = ref 0
@@ -6,7 +16,7 @@ let port = 41_000
 
 let rec iter_create my_port dst_port r =
   let sockaddr = Sockaddr.loopback my_port in
-  let udp_handler t event =
+  let handler t event =
     if !verbose then
       Printf.eprintf "udp_handler: event %s\n%!"
                      (UdpSocket.string_of_event event);
@@ -26,7 +36,7 @@ let rec iter_create my_port dst_port r =
          )
     | _ -> ()
   in
-  let t = UdpSocket.create r sockaddr udp_handler in
+  let t = UdpSocket.create r sockaddr ~handler in
   UdpSocket.write t "Hello !" (Sockaddr.loopback dst_port);
   ()
 

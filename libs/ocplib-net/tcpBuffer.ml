@@ -1,3 +1,13 @@
+(**************************************************************************)
+(*                                                                        *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
+(*                                                                        *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
+(*                                                                        *)
+(**************************************************************************)
+
 let min_buffer_read = 16000
 
 type t = {
@@ -58,6 +68,8 @@ let add_bytes_from_string b s pos len =
   b.len <- b.len + len
 
 let release_bytes b nused =
+  if b.len < nused then
+    raise (BufferReadOverflow (nused, b.len));
   (* Printf.eprintf "release_bytes %d\n%!" nused; *)
   b.len <- b.len - nused;
   b.pos <- b.pos + nused
@@ -65,6 +77,7 @@ let release_bytes b nused =
 let length b = b.len
 let max_refill t = t.max_buf_size - t.len
 let can_refill t = t.max_buf_size > t.len
+let set_max_buf_size t n = t.max_buf_size <- n
 
 let release b =
   release_string b.buf;

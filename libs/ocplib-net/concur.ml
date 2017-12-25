@@ -1,23 +1,12 @@
 (**************************************************************************)
 (*                                                                        *)
-(*                        OCamlPro Typerex                                *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
 (*                                                                        *)
-(*   Copyright OCamlPro 2011-2016. All rights reserved.                   *)
-(*   This file is distributed under the terms of the LGPL v3.0            *)
-(*   (GNU Lesser General Public Licence version 3.0).                     *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
 (*                                                                        *)
-(*     Contact: <typerex@ocamlpro.com> (http://www.ocamlpro.com/)         *)
-(*                                                                        *)
-(*  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       *)
-(*  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES       *)
-(*  OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND              *)
-(*  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS   *)
-(*  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN    *)
-(*  ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN     *)
-(*  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE      *)
-(*  SOFTWARE.                                                             *)
 (**************************************************************************)
-
 
 open StringCompat
 open NetTypes
@@ -139,7 +128,7 @@ end) = (struct
     let _t = TcpServerSocket.create
                ()
                sockaddr
-              (fun t event ->
+              ~handler:(fun t event ->
                 if debug then
                   Printf.eprintf "event: %s\n%!"
                                  (TcpServerSocket.string_of_event event);
@@ -151,7 +140,7 @@ end) = (struct
                    let fd = TcpClientSocket.create
                               con
                               fd
-                              reader
+                              ~handler:reader
                    in
                    con.fd <- Some fd
                 | `ACCEPTING ->
@@ -169,7 +158,7 @@ end) = (struct
     let fd = TcpClientSocket.connect
                con
                sockaddr
-               reader
+               ~handler:reader
     in
     con.fd <- Some fd;
     con

@@ -1,3 +1,12 @@
+(**************************************************************************)
+(*                                                                        *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
+(*                                                                        *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
+(*                                                                        *)
+(**************************************************************************)
 
 (* Test with in several terminals:
 ╰─➤ cat /dev/zero | netcat 127.0.0.1 40000
@@ -10,7 +19,7 @@ let () =
   let sockaddr = Unix.ADDR_INET(Unix.inet_addr_any, 40_000) in
   let t = TcpServerSocket.create
              ~name:"server" () sockaddr
-             (fun t event ->
+             ~handler:(fun t event ->
                Printf.eprintf "server: event %s\n%!"
                               (TcpServerSocket.string_of_event event);
                match event with
@@ -23,7 +32,7 @@ let () =
                     let counter = ref 0 in
                     let t = TcpClientSocket.create
                               ~name:"client" () fd
-                              (fun t event ->
+                              ~handler:(fun t event ->
                                 Printf.eprintf "(%d) client: event %s\n%!"
                                                id
                                                (TcpClientSocket.string_of_event event);

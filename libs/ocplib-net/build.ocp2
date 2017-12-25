@@ -1,3 +1,12 @@
+(**************************************************************************)
+(*                                                                        *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
+(*                                                                        *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
+(*                                                                        *)
+(**************************************************************************)
 
 OCaml.library("ocplib-net",
   ocaml + {
@@ -16,7 +25,6 @@ OCaml.library("ocplib-net",
                (* network utils *)
                netTypes.ml
                netUtils.ml
-               netHex.ml
                netProto.ml (* LittleEndian encode/decode helpers *)
 
                (* lower interfaces *)
@@ -26,9 +34,9 @@ OCaml.library("ocplib-net",
                
                (* higher interfaces *)
                concur.ml
-               netP2P.ml (* TODO: not finished *)
+               netP2P.ml (* requires ocplib-hex *)
 
              ];
-    requires = '[ ocplib-compat lwt.unix ocplib-endian ];
+    requires = '[ ocplib-compat lwt.unix ocplib-endian ocplib-hex ];
   });
 

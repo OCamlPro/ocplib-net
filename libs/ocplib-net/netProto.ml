@@ -1,11 +1,23 @@
+(**************************************************************************)
+(*                                                                        *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
+(*                                                                        *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
+(*                                                                        *)
+(**************************************************************************)
 
   module Endian = EndianString.LittleEndian
 
-  let get_int8 s pos =
+  let get_uint8 s pos =
     int_of_char s.[pos], pos+1
 
+  let get_uint16 s pos =
+    Endian.get_uint16 s pos, pos + 2
+
   let get_int16 s pos =
-    Endian.get_int16 s pos, pos + 2
+    Endian.get_uint16 s pos, pos + 2
 
   let get_int32 s pos =
     Endian.get_int32 s pos, pos + 4
@@ -15,16 +27,16 @@
     Int32.to_int n, pos
 
   let get_string8 s pos =
-    let len, pos = get_int8 s pos in
-    String.sub s (pos+1) len, pos + len
+    let len, pos = get_uint8 s pos in
+    String.sub s pos len, pos + len
 
   let get_string16 s pos =
-    let len, pos = get_int16 s pos in
-    String.sub s (pos+1) len, pos + len
+    let len, pos = get_uint16 s pos in
+    String.sub s pos len, pos + len
 
   let get_string31 s pos =
     let len, pos = get_int31 s pos in
-    String.sub s (pos+4) len, pos + len
+    String.sub s pos len, pos + len
 
   let buf_int8 b n =
     Buffer.add_char b (char_of_int n)

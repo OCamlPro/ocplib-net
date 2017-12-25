@@ -1,4 +1,12 @@
-
+(**************************************************************************)
+(*                                                                        *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
+(*                                                                        *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
+(*                                                                        *)
+(**************************************************************************)
 
 open NetTypes
 
@@ -37,9 +45,11 @@ type 'peer connection = {
     mutable conn_state : connection_state;
   }
 
-let id_len = 16
+let peer_id_len = 16
+
+let random_peer_id () = NetUtils.random_string peer_id_len
 let string_of_ip ip = ip
-let string_of_id id = NetHex.of_string id
+let string_of_id id = Hex.encode id
 
 module MakeNetwork ( M : sig
 
@@ -49,7 +59,7 @@ module MakeNetwork ( M : sig
       val new_peer : peer_id -> (peer_ip * int) option -> peer
       val peer_connection : peer -> peer connection option
       val set_peer_connection : peer -> peer connection option -> unit
-      val peer_address : peer -> (peer_ip * int) option
+      val peer_addr : peer -> (peer_ip * int) option
       val protocol_name : string
 
     end)
@@ -95,11 +105,11 @@ module MakeNetwork ( M : sig
         try
           m.message_reader msg pos
         with e ->
-            Printf.eprintf "KernelClient.parse_message: exception %s\n"
+            Printf.eprintf "KernelClient.parse_message: exception %s\n%!"
               (Printexc.to_string e);
             raise e
       in
-      Printf.eprintf "Parsed: %s\n" (m.message_printer  msg);
+      Printf.eprintf "Parsed: %s\n%!" (m.message_printer  msg);
       Obj.magic (m,msg)
 
     let string_of_message m t = m.message_printer t
@@ -124,8 +134,8 @@ module MakeNetwork ( M : sig
 (*                port = port; *)
               })
           (fun body ->
-              Printf.sprintf "CONNECTING {\n\tuid = %s\n  }\n"
-                (NetHex.of_string body.id))
+              Printf.sprintf "CONNECTING {\n\tuid = %s\n  }\n%!"
+                (Hex.encode body.id))
       end
 
     module ByeMsg = struct
@@ -137,7 +147,7 @@ module MakeNetwork ( M : sig
         let msg = declare_message "BYE"
             (fun b body -> assert false )
           (fun s pos -> assert false )
-          (fun body -> Printf.sprintf "BYE {\n\tfrom_state = %s\n } \n"
+          (fun body -> Printf.sprintf "BYE {\n\tfrom_state = %s\n } \n%!"
                 (string_of_state body.from_state)
           )
       end
@@ -151,7 +161,7 @@ module MakeNetwork ( M : sig
 
         let msg = declare_message M.name (fun b t -> ())
           (fun s pos -> ())
-          (fun body -> Printf.sprintf "%s { } \n" M.name)
+          (fun body -> Printf.sprintf "%s { } \n%!" M.name)
       end
 
     module IdentifiedMsg = struct
@@ -170,22 +180,23 @@ module MakeNetwork ( M : sig
           )
           (fun s pos ->
               let ip, pos = NetProto.get_string8 s pos in
-              let port, pos =  NetProto.get_int16 s pos in
-              let my_port, _ =  try NetProto.get_int16 s pos with _ -> 0, pos in
+              let port, pos =  NetProto.get_uint16 s pos in
+              let my_port, _ =  try NetProto.get_uint16 s pos
+                                with _ -> 0, pos in
               {
                 ip =  ip;
                 port = port;
                 my_port = my_port;
               })
           (fun body ->
-              Printf.sprintf "IDENTIFIED { \n\tip = %s\n\tport = %d\n\tmy_port = %d\n  }\n"
+              Printf.sprintf "IDENTIFIED { \n\tip = %s\n\tport = %d\n\tmy_port = %d\n  }\n%!"
                 (string_of_ip body.ip) body.port body.my_port)
 
       end
 
     let my_port = ref 0
     let set_my_port port = my_port := port
-    let my_id = ref (NetUtils.random_string id_len)
+    let my_id = ref (random_peer_id ())
     let set_my_id id = my_id := id
     let get_my_id () = !my_id
 
@@ -196,14 +207,14 @@ module MakeNetwork ( M : sig
 
     let declare_handler m handler =
       message_handlers := StringMap.add m.message_name (Obj.magic
-          (handler : peer -> 'a -> unit) )
+          (handler : peer connection -> 'a -> unit) )
       !message_handlers
 
 
     let write_message m t =
 
-      Printf.eprintf "SENDING %s:\n" m.message_name;
-      Printf.eprintf "%s\n" (m.message_printer t);
+      Printf.eprintf "SENDING %s:\n%!" m.message_name;
+      Printf.eprintf "%s\n%!" (m.message_printer t);
 
       NetProto.buf_string31 send_buf m.message_name;
       m.message_writer send_buf t
@@ -232,7 +243,7 @@ module MakeNetwork ( M : sig
           try
             f c msg
           with e ->
-              Printf.eprintf "Exception %s in handler for %s\n"
+              Printf.eprintf "Exception %s in handler for %s\n%!"
                 (Printexc.to_string e) m.message_name
 
 (* Note: receiver_parse_message won't raise an exception unless something bad happened during parsing ! *)
@@ -245,7 +256,7 @@ module MakeNetwork ( M : sig
             Printf.eprintf "No peer associated with connection"
         | Some p ->
             Printf.eprintf "New message from peer %s"
-              (NetHex.of_string (M.peer_id p))
+              (Hex.encode (M.peer_id p))
       end;
       let (m, msg) = parse_message msg pos in
       do_handler c m msg
@@ -301,7 +312,9 @@ module MakeNetwork ( M : sig
                   M.set_peer_connection p None;
                   do_handler c ByeMsg.msg {
                     ByeMsg.from_state = c.conn_state
-                  }
+                             };
+                  peers_by_id := StringMap.remove
+                                   (M.peer_id p) !peers_by_id
               | _ -> ());
             c.conn_peer <- None
       );
@@ -320,7 +333,7 @@ module MakeNetwork ( M : sig
               None -> ()
             | Some p ->
                 Printf.eprintf "Sending message to peer %s"
-                  (NetHex.of_string (M.peer_id p))
+                  (Hex.encode (M.peer_id p))
           end;
           TcpClientSocket.write_string sock (netstring_of_message msg content)
 
@@ -345,29 +358,32 @@ module MakeNetwork ( M : sig
       c
 
     let bind_port port =
-      let event_handler t event =
+      let handler t event =
         match event with
         | `CONNECTION (fd, sockaddr) ->
            let from_ip, from_port =
              match sockaddr with
              | Unix.ADDR_INET(from_ip, from_port) ->
-                      NetUtils.string_of_inet_addr from_ip, from_port
+                NetUtils.string_of_inet_addr from_ip, from_port
              | _ -> assert false
            in
-            Printf.eprintf "New Incoming Connecting from %s:%d"
-              (string_of_ip from_ip) from_port;
+           Printf.eprintf "New Incoming Connecting from %s:%d"
+                          (string_of_ip from_ip) from_port;
 
-            let sock = TcpClientSocket.create
-                         ~name:"client-helper connection" () fd
-                         (fun _t _event -> ()) in
-            let _c = init_connection sock None from_ip from_port in
-            ()
+           let sock = TcpClientSocket.create
+                        ~name:"client-helper connection" () fd in
+           let _c = init_connection sock None from_ip from_port in
+           ()
+        | `ACCEPTING ->
+           begin match TcpServerSocket.sockaddr t with
+           | Unix.ADDR_INET(_,port) -> my_port := port
+           | _ -> ()
+           end
         | _ -> ()
-
       in
-      let (_t : unit TcpServerSocket.t) =
+      let (__t : unit TcpServerSocket.t) =
         TcpServerSocket.create ~name:"server" ()
-                               (Sockaddr.any port) event_handler
+                               (Sockaddr.any port) ~handler
       in
       ()
 
@@ -378,11 +394,9 @@ module MakeNetwork ( M : sig
           Printf.eprintf "NetP2P.disconnect called";
           sock_closer c () Closed_by_user
 
-                      (*
-(* TODO: garbage collect !peers_by_id *)
     let new_peer peer_id addr =
       try
-        let p = Sha1Map.find peer_id !peers_by_id in
+        let p = StringMap.find peer_id !peers_by_id in
 (*        (match p.peer_addr with
             None -> p.peer_addr <- addr
           | Some _ -> ()); *)
@@ -394,13 +408,12 @@ module MakeNetwork ( M : sig
             peer_addr = addr;
             peer_conn = None;
             } in *)
-          peers_by_id := Sha1Map.add peer_id p !peers_by_id;
+          peers_by_id := StringMap.add peer_id p !peers_by_id;
           (p : M.peer)
 
     let connect_addr ip port peer =
-      let token = create_token unlimited_connection_manager in
-      let sock = TcpSocket.create_new token "connect_to" in
-      TcpSocket.connect sock ip port;
+      let sock = TcpClientSocket.connect ()
+                                         (Sockaddr.of_ip ip port) in
       let c = init_connection sock peer ip port in
       c
 
@@ -409,29 +422,32 @@ module MakeNetwork ( M : sig
       | Some conn ->
           Printf.eprintf "NetP2P.connect: peer already connected"
       | None ->
-          match M.peer_address p with
+          match M.peer_addr p with
             None ->
               failwith "NetP2P.connect: peer address is unknown"
           | Some (ip,port) ->
               Printf.eprintf "Connecting to %s %s:%d"
-                (NetHex.of_string (M.peer_id p)) (Ip.to_string ip) port;
+                (Hex.encode (M.peer_id p)) (string_of_ip ip) port;
               let c = connect_addr ip port (Some p) in
               M.set_peer_connection p ( Some c )
 
     let set_rtimeout c n =
       match c.conn_sock with
         None -> ()
-      | Some sock -> TcpSocket.set_rtimeout sock n
+      | Some sock -> TcpClientSocket.set_rtimeout sock n
 
+                                                  (*
     let set_lifetime c n =
       match c.conn_sock with
         None -> ()
-      | Some sock -> TcpSocket.set_lifetime sock n
+      | Some sock -> TcpClientSocket.set_lifetime sock n
+                                                   *)
 
     let set_max_output_buffer c n =
       match c.conn_sock with
         None -> ()
-      | Some sock -> TcpSocket.set_max_output_buffer sock n
+      | Some sock -> TcpClientSocket.set_max_output_buffer sock n
+
 
     let connection_identified c =
       c.conn_state <- IDENTIFIED;
@@ -442,21 +458,6 @@ module MakeNetwork ( M : sig
         port = port;
         my_port = !my_port;
       }
-
-    let set_rtimeout p n =
-      match M.peer_connection p with
-        None -> ()
-      | Some c -> set_rtimeout c n
-
-    let set_lifetime p n =
-      match M.peer_connection p with
-        None -> ()
-      | Some c -> set_lifetime c n
-
-    let set_max_output_buffer p n =
-      match M.peer_connection p with
-        None -> ()
-      | Some c -> set_max_output_buffer c n
 
     let _ =
       declare_handler ConnectingMsg.msg (fun
@@ -519,17 +520,26 @@ module MakeNetwork ( M : sig
     let send p msg content =
       match M.peer_connection p with
         None ->
-          Printf.eprintf "While sending %s:\n" msg.message_name;
-          Printf.eprintf "%s\n" (msg.message_printer content);
+          Printf.eprintf "While sending %s:\n%!" msg.message_name;
+          Printf.eprintf "%s\n%!" (msg.message_printer content);
 
           failwith "NetP2P.send: peer not connected"
       | Some c ->
           if c.conn_state = IDENTIFIED then
             connection_send c msg content
 
-                       *)
-
     let get_peer id = StringMap.find id !peers_by_id
     let iter_peers f =
       StringMap.iter (fun _ p -> f p) !peers_by_id
+
+    let set_rtimeout p n =
+      match M.peer_connection p with
+        None -> ()
+      | Some c -> set_rtimeout c n
+
+    let set_max_output_buffer p n =
+      match M.peer_connection p with
+        None -> ()
+      | Some c -> set_max_output_buffer c n
+
   end

@@ -1,0 +1,5 @@
+
+OCaml.library('ocplib-hex, ocaml + {
+    files = ' hex.ml;
+   });
+   

@@ -1,3 +1,12 @@
+(**************************************************************************)
+(*                                                                        *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
+(*                                                                        *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
+(*                                                                        *)
+(**************************************************************************)
 
 open NetTypes
 
@@ -6,7 +15,7 @@ let () =
   let t = TcpClientSocket.connect
             ()
             (Sockaddr.of_ip "127.0.0.1" 40_000)
-            (fun t event ->
+            ~handler:(fun t event ->
               Printf.eprintf "client: event %s\n%!"
                              (TcpClientSocket.string_of_event event);
               match event with

@@ -1,3 +1,15 @@
+(**************************************************************************)
+(*                                                                        *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
+(*                                                                        *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
+(*                                                                        *)
+(**************************************************************************)
+
+(* This module is used internally by TcpClientSocket. It should not be
+   used directly. *)
 
 type t
 
@@ -22,6 +34,7 @@ val length : t -> int
 (* Maximal number of bytes that could be written *)
 val max_refill : t -> int
 val can_refill : t -> bool
+val set_max_buf_size : t -> int -> unit
 
 val get : t -> int -> char
 

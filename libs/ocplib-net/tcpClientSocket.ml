@@ -1,3 +1,12 @@
+(**************************************************************************)
+(*                                                                        *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
+(*                                                                        *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
+(*                                                                        *)
+(**************************************************************************)
 
 open NetTypes
 
@@ -269,12 +278,18 @@ let rec iter_socket t =
          exec_events t;
          iter_socket t)
 
+let dummy_handler t event =
+  match event with
+  | `RTIMEOUT | `WTIMEOUT -> close t Closed_for_timeout
+  | #event -> ()
+
 (* val create : name:string -> Unix.file_descr -> handler -> t *)
 let create ?(name="unknown") ?(max_buf_size = 1_000_000)
            ?connecting
+           ?(handler=dummy_handler)
            info
            fd
-           handler =
+            =
   let sock = Socket fd in
   let rbuf = TcpBuffer.create max_buf_size in
   let wbuf = TcpBuffer.create max_buf_size in
@@ -310,17 +325,21 @@ let create ?(name="unknown") ?(max_buf_size = 1_000_000)
 
 
 (* val connect: string -> Unix.file_descr -> int -> handler -> t *)
-let connect ?name ?max_buf_size info sockaddr handler =
+let connect ?name ?max_buf_size ?handler info sockaddr =
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  create ?name ?max_buf_size ?connecting:(Some sockaddr) info fd handler
+  create ?name ?max_buf_size ?connecting:(Some sockaddr) ?handler info fd
 
-let create ?name ?max_buf_size info fd handler =
-  create ?name ?max_buf_size info fd handler
+let create ?name ?max_buf_size ?handler info fd  =
+  create ?name ?max_buf_size info fd ?handler
 
 (* val write : t -> string -> pos:int -> len:int -> unit *)
 let write t s ~pos ~len =
-  TcpBuffer.add_bytes_from_string t.wbuf s pos len;
-  activate_thread t
+  if len > 0 then begin
+      if TcpBuffer.length t.wbuf = 0 then
+        t.last_write <- NetTimer.current_time ();
+      TcpBuffer.add_bytes_from_string t.wbuf s pos len;
+      activate_thread t
+    end
 
 let write_string t s =
   write t s ~pos:0 ~len:(String.length s)
@@ -342,7 +361,8 @@ let set_rtimeout t rtimeout =
 (* val set_wtimeout : t -> float -> unit *)
 let set_wtimeout t wtimeout =
   t.wtimeout <- float_of_int wtimeout;
-  activate_thread t
+  if TcpBuffer.length t.wbuf > 0 then
+    activate_thread t
 
 (* val set_lifetime : t -> float -> unit *)
 (*let set_lifetime _ = assert false *)
@@ -358,12 +378,15 @@ let string_of_event (event : tcpSocketEvent) =
   | #NetTypes.event as event -> NetUtils.string_of_event event
 
 
-
+let max_refill t = TcpBuffer.max_refill t.rbuf
 
 let blit t pos0 s pos len =
   TcpBuffer.blit t.rbuf pos0 s pos len
 let release t n =
-  TcpBuffer.release_bytes t.rbuf n
+  if n > 0 then begin
+      TcpBuffer.release_bytes t.rbuf n;
+      activate_thread t
+    end
 let read t s pos len =
   TcpBuffer.read t.rbuf s pos len;
   activate_thread t
@@ -375,11 +398,10 @@ let read_all t =
   read_string t (TcpBuffer.length t.rbuf)
 
 let rlength t = TcpBuffer.length t.rbuf
+
+let set_max_output_buffer t n = TcpBuffer.set_max_buf_size t.wbuf n
 let wlength t = TcpBuffer.length t.wbuf
 let get t pos = TcpBuffer.get t.rbuf pos
-let release_bytes t n =
-  TcpBuffer.release_bytes t.rbuf n;
-  activate_thread t
 
 let nwritten t = t.nwritten
 let nread t = t.nread

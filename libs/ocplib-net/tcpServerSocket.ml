@@ -1,3 +1,13 @@
+(**************************************************************************)
+(*                                                                        *)
+(*    Copyright 2017-2018 OCamlPro                                        *)
+(*                                                                        *)
+(*  All rights reserved. This file is distributed under the terms of the  *)
+(*  GNU Lesser General Public License version 2.1, with the special       *)
+(*  exception on linking described in the file LICENSE.                   *)
+(*                                                                        *)
+(**************************************************************************)
+
 open NetTypes
 
 let debug = false
@@ -139,9 +149,10 @@ let rec iter_accept t =
          iter_accept t)
 
 let create ?(name="unknown")
+           ?(handler = (fun _t _event -> ()))
            info
            sockaddr
-           handler =
+  =
   let domain = match sockaddr with
     | Unix.ADDR_INET _ -> Unix.PF_INET
     | Unix.ADDR_UNIX _ -> Unix.PF_UNIX
