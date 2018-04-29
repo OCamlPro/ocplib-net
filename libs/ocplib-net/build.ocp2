@@ -12,6 +12,7 @@ OCaml.library("ocplib-net",
   ocaml + {
     files = '[
                (* main loop *)
+               netLog.ml
                netLoop.ml
 
                (* system *)
@@ -29,7 +30,8 @@ OCaml.library("ocplib-net",
 
                (* lower interfaces *)
                sockaddr.ml
-               tcpClientSocket.ml tcpServerSocket.ml
+               tcpClientSocket.ml
+               tcpServerSocket.ml
                udpSocket.ml
                
                (* higher interfaces *)

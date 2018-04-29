@@ -63,4 +63,4 @@ let () =
   if !port > 40_000 then
     PaceMakerNetwork.connect_addr "127.0.0.1" 40_000;
 
-  NetLoop.main ()
+  exit (NetLoop.main ())

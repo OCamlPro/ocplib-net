@@ -8,15 +8,9 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(* [main ()] returns when [exit n] is called, with result [n]. In the
-   meantime, it runs the Lwt loop. *)
-val main : unit -> int
-val exit : int -> unit
-
-(* [defer f] defers execution of [f] after all currently executable
-   continuations. *)
-val defer : (unit -> 'a Lwt.t) -> unit
-
-(* [wakeup u] will wake thread [u] after all currently executable
-   continuations. *)
-val wakeup : unit Lwt.u -> unit
+let debug = Lwt_log.ign_debug_f
+let info = Lwt_log.ign_info_f
+let notice = Lwt_log.ign_notice_f
+let warning = Lwt_log.ign_warning_f
+let error = Lwt_log.ign_error_f
+let fatal = Lwt_log.ign_fatal_f

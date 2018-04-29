@@ -53,4 +53,4 @@ let () =
     ] (fun _ -> assert false) "";
   let r = ref true in
   iter_create !my_port !dst_port r;
-  NetLoop.main ()
+  exit (NetLoop.main ())

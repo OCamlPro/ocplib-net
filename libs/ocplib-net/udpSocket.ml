@@ -8,6 +8,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open StringCompat
 open NetTypes
 
 exception PacketWriteOverflow of int * int * int
@@ -131,7 +132,7 @@ let rec iter_socket t =
          Lwt.bind (Lwt_unix.recvfrom fd t.buf 0 65536 [])
                   (fun (nread, msg_sockaddr) ->
                     if nread > 0 then begin
-                        let msg_content = String.sub t.buf 0 nread in
+                        let msg_content = Bytes.sub_string t.buf 0 nread in
                         let u = { msg_content;
                                   msg_sockaddr } in
                         Queue.add u t.rbuf;
@@ -176,7 +177,7 @@ let rec iter_socket t =
        if t.wsize > 0 then
          let u = Queue.peek t.wbuf in
          (* Printf.eprintf "Preparing to write\n%!"; *)
-         Lwt.bind (Lwt_unix.sendto fd u.msg_content 0
+         Lwt.bind (Lwt_unix.sendto fd (Bytes.of_string u.msg_content) 0
                                    (String.length u.msg_content)
                                    [] u.msg_sockaddr)
                   (fun nwritten ->

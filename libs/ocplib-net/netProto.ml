@@ -8,35 +8,25 @@
 (*                                                                        *)
 (**************************************************************************)
 
-  module Endian = EndianString.LittleEndian
+open StringCompat
 
-  let get_uint8 s pos =
-    int_of_char s.[pos], pos+1
+module type S = sig
+  type chars
+  val get_uint8 : chars -> int -> int * int
+  val get_uint16 : chars -> int -> int * int
 
-  let get_uint16 s pos =
-    Endian.get_uint16 s pos, pos + 2
+  val get_int16 : chars -> int -> int * int
 
-  let get_int16 s pos =
-    Endian.get_uint16 s pos, pos + 2
+  val get_int31 : chars -> int -> int * int
+  val get_int32 : chars -> int -> int32 * int
 
-  let get_int32 s pos =
-    Endian.get_int32 s pos, pos + 4
+  val get_string8 : chars -> int -> string * int
+  val get_string16 : chars -> int -> string * int
+  val get_string31 : chars -> int -> string * int
 
-  let get_int31 s pos =
-    let n,pos = get_int32 s pos in
-    Int32.to_int n, pos
+end
 
-  let get_string8 s pos =
-    let len, pos = get_uint8 s pos in
-    String.sub s pos len, pos + len
-
-  let get_string16 s pos =
-    let len, pos = get_uint16 s pos in
-    String.sub s pos len, pos + len
-
-  let get_string31 s pos =
-    let len, pos = get_int31 s pos in
-    String.sub s pos len, pos + len
+module Endian = EndianBytes.LittleEndian
 
   let buf_int8 b n =
     Buffer.add_char b (char_of_int n)
@@ -66,8 +56,80 @@
     buf_int16 b (String.length s);
     Buffer.add_string b s
 
-  let str_int32 s pos n =
+  let set_int32 s pos n =
     Endian.set_int32 s pos n
 
-  let str_int31 s pos n =
-    str_int32 s pos (Int32.of_int n)
+  let set_int31 s pos n =
+    set_int32 s pos (Int32.of_int n)
+
+
+module Bytes : S with type chars := bytes
+                                    = struct
+
+  let get_uint8 s pos =
+    int_of_char (Bytes.get s pos), pos+1
+
+  let get_uint16 s pos =
+    Endian.get_uint16 s pos, pos + 2
+
+  let get_int16 s pos =
+    Endian.get_uint16 s pos, pos + 2
+
+  let get_int32 s pos =
+    Endian.get_int32 s pos, pos + 4
+
+  let get_int31 s pos =
+    let n,pos = get_int32 s pos in
+    Int32.to_int n, pos
+
+  let get_string8 s pos =
+    let len, pos = get_uint8 s pos in
+    Bytes.sub_string s pos len, pos + len
+
+  let get_string16 s pos =
+    let len, pos = get_uint16 s pos in
+    Bytes.sub_string s pos len, pos + len
+
+  let get_string31 s pos =
+    let len, pos = get_int31 s pos in
+    Bytes.sub_string s pos len, pos + len
+
+                      end
+;;
+
+module String :
+  S with type chars := string
+  = struct
+
+           module Endian = EndianString.LittleEndian
+
+  let get_uint8 s pos =
+    int_of_char s.[pos], pos+1
+
+  let get_uint16 s pos =
+    Endian.get_uint16 s pos, pos + 2
+
+  let get_int16 s pos =
+    Endian.get_uint16 s pos, pos + 2
+
+  let get_int32 s pos =
+    Endian.get_int32 s pos, pos + 4
+
+  let get_int31 s pos =
+    let n,pos = get_int32 s pos in
+    Int32.to_int n, pos
+
+  let get_string8 s pos =
+    let len, pos = get_uint8 s pos in
+    String.sub s pos len, pos + len
+
+  let get_string16 s pos =
+    let len, pos = get_uint16 s pos in
+    String.sub s pos len, pos + len
+
+  let get_string31 s pos =
+    let len, pos = get_int31 s pos in
+    String.sub s pos len, pos + len
+
+  end
+;;

@@ -91,7 +91,7 @@ module MakeNetwork ( M : sig
       m
 
     let parse_message msg pos =
-      let message_name, pos = NetProto.get_string31 msg pos in
+      let message_name, pos = NetProto.String.get_string31 msg pos in
 (*        let msg_num, pos = get_int msg pos in *)
       let m = try
           StringMap.find message_name !messages_by_name
@@ -126,7 +126,7 @@ module MakeNetwork ( M : sig
               NetProto.buf_string8 b body.id;
           )
           (fun s pos ->
-              let peer_id,pos = NetProto.get_string8 s pos in
+              let peer_id,pos = NetProto.String.get_string8 s pos in
 (*              let port = try
                   NetProto.get_int16 s pos with _ -> 0 in *)
               {
@@ -179,9 +179,9 @@ module MakeNetwork ( M : sig
               NetProto.buf_int16 b body.my_port;
           )
           (fun s pos ->
-              let ip, pos = NetProto.get_string8 s pos in
-              let port, pos =  NetProto.get_uint16 s pos in
-              let my_port, _ =  try NetProto.get_uint16 s pos
+              let ip, pos = NetProto.String.get_string8 s pos in
+              let port, pos =  NetProto.String.get_uint16 s pos in
+              let my_port, _ =  try NetProto.String.get_uint16 s pos
                                 with _ -> 0, pos in
               {
                 ip =  ip;
@@ -226,10 +226,10 @@ module MakeNetwork ( M : sig
       NetProto.buf_int31 send_buf !nmessages;
       incr nmessages;
       write_message m t;
-      let s = Buffer.contents send_buf in
-      let len = String.length s - 4 in
-      NetProto.str_int31 s 0 len;
-      s
+      let b = Buffer.to_bytes send_buf in
+      let len = Bytes.length b - 4 in
+      NetProto.set_int31 b 0 len;
+      Bytes.to_string b
 
     let do_handler c m msg =
       match
@@ -248,7 +248,7 @@ module MakeNetwork ( M : sig
 
 (* Note: receiver_parse_message won't raise an exception unless something bad happened during parsing ! *)
     let receiver_parse_message c msg pos =
-      let _message_counter = NetProto.get_int31 msg pos in
+      let _message_counter = NetProto.String.get_int31 msg pos in
       let pos = pos + 4 in
       begin
         match c.conn_peer with
@@ -265,9 +265,9 @@ module MakeNetwork ( M : sig
       let rec iter () =
         let buflen = TcpClientSocket.rlength t in
         if buflen >= 4 then
-          let s = Bytes.create 4 in
-          TcpClientSocket.blit t 0 s 0 4;
-          let msg_len, pos = NetProto.get_int31 s 0 in
+          let b = Bytes.create 4 in
+          TcpClientSocket.blit t 0 b 0 4;
+          let msg_len, pos = NetProto.Bytes.get_int31 b 0 in
           if buflen >= 4 + msg_len then begin
             TcpClientSocket.release t 4;
             let s = TcpClientSocket.read_string t msg_len in
@@ -282,7 +282,7 @@ module MakeNetwork ( M : sig
 
     let rec parse_string c s pos len =
       if len >= 4 then
-        let msg_len, new_pos = NetProto.get_int31 s pos in
+        let msg_len, new_pos = NetProto.String.get_int31 s pos in
         let total_length = 4 + msg_len in
         if len >= total_length then begin
             receiver_parse_message c s new_pos;
@@ -335,7 +335,8 @@ module MakeNetwork ( M : sig
                 Printf.eprintf "Sending message to peer %s"
                   (Hex.encode (M.peer_id p))
           end;
-          TcpClientSocket.write_string sock (netstring_of_message msg content)
+          TcpClientSocket.write_string_full sock
+                                            (netstring_of_message msg content)
 
     let send_id c =
       connection_send c ConnectingMsg.msg {

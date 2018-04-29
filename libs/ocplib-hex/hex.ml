@@ -8,10 +8,13 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open StringCompat
+
 type t = string
 
 let compare = String.compare
-let equal = String.equal
+(* let equal = String.equal *)
+let equal = (=)
 
 let char_hex n =
   Char.unsafe_chr (n + if n < 10 then Char.code '0' else (Char.code 'a' - 10))

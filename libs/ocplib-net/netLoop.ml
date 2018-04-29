@@ -8,14 +8,14 @@
 (*                                                                        *)
 (**************************************************************************)
 
-let should_exit = ref false
+let should_exit = ref None
 
 let signal = ref None
 let main () =
   let rec sleep () =
-    if !should_exit then
-      Lwt.return ()
-    else
+    match !should_exit with
+    | Some n -> Lwt.return n
+    | None ->
       let t,u = Lwt.wait () in
       signal := Some u;
       Lwt.bind t sleep
@@ -26,11 +26,11 @@ let wakeup_main_thread () =
   match !signal with
   | None -> ()
   | Some u ->
-     signal := None;
-     Lwt.wakeup u ()
+    signal := None;
+    Lwt.wakeup u ()
 
-let exit () =
-  should_exit := true;
+let exit n =
+  should_exit := Some n;
   wakeup_main_thread ()
 
 let defer f =

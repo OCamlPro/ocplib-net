@@ -30,8 +30,8 @@ let send_message con msg =
   match con.fd with
   | None -> assert false
   | Some fd ->
-     TcpClientSocket.write_string fd (Bytes.to_string b);
-     TcpClientSocket.write_string fd msg
+     TcpClientSocket.write_bytes_full fd b;
+     TcpClientSocket.write_string_full fd msg
 
 let shutdown con =
   match con.fd with
@@ -105,12 +105,12 @@ end) = (struct
          let s = Bytes.create 4 in
          TcpClientSocket.blit t 0 s 0 4;
          let msg_len = Int32.to_int
-                         (EndianString.LittleEndian.get_int32 s 0) in
+                         (EndianBytes.LittleEndian.get_int32 s 0) in
          if TcpClientSocket.rlength t >= 4 + msg_len then begin
              TcpClientSocket.release t 4;
              let s = Bytes.create msg_len in
              TcpClientSocket.read t s 0 msg_len;
-             message_handler con s
+             message_handler con (Bytes.to_string s)
            end
     | `CLOSED _reason ->
        disconnection_handler con.info;

@@ -8,6 +8,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open StringCompat
+
 type close_reason =
   Closed_for_timeout    (* timeout exceeded *)
 | Closed_for_lifetime   (* lifetime exceeded *)

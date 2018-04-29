@@ -11,7 +11,7 @@
 let min_buffer_read = 16000
 
 type t = {
-    mutable buf : string;
+    mutable buf : bytes;
     mutable pos : int;
     mutable len : int;
     mutable max_buf_size : int;
@@ -38,7 +38,7 @@ let create max =
 
 let prepare_space_for_bytes b n =
   let curpos = b.pos + b.len in
-  let len = String.length b.buf in
+  let len = Bytes.length b.buf in
   if curpos + n < len then curpos
   else
     if b.len + n > b.max_buf_size then
@@ -52,19 +52,24 @@ let prepare_space_for_bytes b n =
           let new_buf = new_string new_len in
           b.buf <- new_buf
         end;
-      String.blit old_buf b.pos b.buf 0 b.len;
+      Bytes.blit old_buf b.pos b.buf 0 b.len;
       if b.buf != old_buf then
         release_string old_buf;
       b.pos <- 0;
       b.len
 
-let add_bytes_from_string b s pos len =
+let add_bytes b s pos len =
+  let curpos = prepare_space_for_bytes b len in
+  Bytes.blit s pos b.buf curpos len;
+  b.len <- b.len + len
+
+let add_string b s pos len =
   let curpos = prepare_space_for_bytes b len in
   (*
   Printf.eprintf "prepare_space_for_bytes (write): %d/%d/%d -> %d %d\n%!"
                  b.pos b.len (String.length b.buf) curpos len;
    *)
-  String.blit s pos b.buf curpos len;
+  Bytes.blit_string s pos b.buf curpos len;
   b.len <- b.len + len
 
 let release_bytes b nused =
@@ -81,9 +86,9 @@ let set_max_buf_size t n = t.max_buf_size <- n
 
 let release b =
   release_string b.buf;
-  b.buf <- ""
+  b.buf <- Bytes.create 0
 
-let add_bytes_from_read b fd n =
+let add_from_fd b fd n =
   let curpos = prepare_space_for_bytes b n in
   (* Printf.eprintf "prepare_space_for_bytes (read): %d/%d/%d -> %d %d\n%!"
                  b.pos b.len (String.length b.buf) curpos n; *)
@@ -113,7 +118,7 @@ let add_bytes_from_read b fd n =
 let get b pos =
   if b.len <= pos then
     raise (BufferReadOverflow (pos, b.len));
-  b.buf.[b.pos + pos]
+  Bytes.get b.buf (b.pos + pos)
 
 let blit b pos0 s pos len =
   if b.len < pos0 + len then
@@ -121,7 +126,7 @@ let blit b pos0 s pos len =
   (* Printf.eprintf "String.blit %d/%d/%d %d/%d/%d\n%!"
                  (String.length b.buf) b.pos b.len
                  (String.length s) pos len; *)
-  String.blit b.buf b.pos s pos len
+  Bytes.blit b.buf b.pos s pos len
 
 let read b s pos len =
   blit b 0 s pos len;

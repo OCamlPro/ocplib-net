@@ -21,8 +21,9 @@ val create : int -> t
 (* Release unused buffer *)
 val release : t -> unit
 
-val add_bytes_from_string : t -> string -> int -> int -> unit
-val add_bytes_from_read :
+val add_bytes : t -> bytes -> int -> int -> unit
+val add_string : t -> string -> int -> int -> unit
+val add_from_fd :
   t -> Lwt_unix.file_descr -> int -> int Lwt.t
 
 (* Release a given number of bytes *)
@@ -39,8 +40,8 @@ val set_max_buf_size : t -> int -> unit
 val get : t -> int -> char
 
 (* bytes read are NOT released *)
-val blit : t -> int -> string -> int -> int -> unit
+val blit : t -> int -> bytes -> int -> int -> unit
 (* bytes read are immediately released *)
-val read : t -> string -> int -> int -> unit
+val read : t -> bytes -> int -> int -> unit
 
 val write : t -> Lwt_unix.file_descr -> int Lwt.t

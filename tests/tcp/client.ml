@@ -32,6 +32,6 @@ let () =
                  exit 0
             )
   in
-  TcpClientSocket.write_string t "Hello!!!\r\n";
+  TcpClientSocket.write_string_full t "Hello!!!\r\n";
   Printf.eprintf "Client started\n%!";
-  NetLoop.main ()
+  exit (NetLoop.main ())

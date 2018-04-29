@@ -17,7 +17,7 @@ module Socket = Concur.MakeSocket(struct
 
     let disconnection_handler con =
       Printf.eprintf "Disconnected\n%!";
-      if !should_close then Concur.exit ()
+      if !should_close then Concur.exit 0
 
     let message_handler con msg =
       Printf.eprintf "Received %S from connection\n%!" msg;
@@ -67,4 +67,4 @@ let () =
       let _con = Socket.connect  (ref [ "Hello server"; "How are you ?" ]) sockaddr in
       should_close := true
   end;
-  Concur.main ()
+  exit (Concur.main ())

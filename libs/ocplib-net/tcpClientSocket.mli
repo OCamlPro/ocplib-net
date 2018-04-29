@@ -8,6 +8,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open StringCompat
 open NetTypes
 
 (* The type of a TCP socket to send/receive data. *)
@@ -45,10 +46,12 @@ val connect: ?name:string ->
              'info t
 
 (* Can raise BufferWriteOverflow *)
-val write : 'info t -> string -> pos:int -> len:int -> unit
+val write_string : 'info t -> string -> pos:int -> len:int -> unit
+val write_bytes : 'info t -> bytes -> pos:int -> len:int -> unit
 
 (* Can raise BufferWriteOverflow *)
-val write_string : 'info t -> string -> unit
+val write_string_full : 'info t -> string -> unit
+val write_bytes_full : 'info t -> bytes -> unit
 
 val close : 'info t -> NetTypes.close_reason -> unit
 val shutdown : 'info t -> NetTypes.close_reason -> unit
@@ -75,13 +78,13 @@ val string_of_event : NetTypes.tcpSocketEvent -> string
 val read_all : 'info t -> string
 
 (* Can raise BufferReadOverflow *)
-val blit : 'info t -> int -> string -> int -> int -> unit
+val blit : 'info t -> int -> bytes -> int -> int -> unit
 
 (* Can raise BufferReadOverflow *)
 val release : 'info t -> int -> unit
 
 (* Can raise BufferReadOverflow *)
-val read : 'info t -> string -> int -> int -> unit
+val read : 'info t -> bytes -> int -> int -> unit
 
 (* Can raise BufferReadOverflow *)
 val read_string : 'info t -> int -> string

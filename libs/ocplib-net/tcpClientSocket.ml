@@ -50,16 +50,16 @@ let exec_handler t event =
   try
     t.handler t event
   with exn ->
-    Printf.eprintf "TcpServerSocket: exception %S in handler\n%!"
-                   (Printexc.to_string exn)
+    Printf.eprintf "TcpClientSocket: exception %S in handler\n%!"
+      (Printexc.to_string exn)
 
 let activate_thread t =
   match t.wakener with
   | None -> () (* Not useful, the thread is already awake *)
   | Some u ->
-     Printf.eprintf "wakeup\n%!";
-     NetLoop.wakeup u;
-     t.wakener <- None
+    (* Printf.eprintf "wakeup\n%!"; *)
+    NetLoop.wakeup u;
+    t.wakener <- None
 
 (* val close : t -> close_reason -> unit *)
 let close t reason =
@@ -67,8 +67,8 @@ let close t reason =
   | Closed _ -> ()
   | Closing (_fd, _reason) -> ()
   | Socket fd ->
-     t.sock <- Closing (fd, reason);
-     activate_thread t
+    t.sock <- Closing (fd, reason);
+    activate_thread t
 
 (* val closed : t -> bool *)
 let closed t =
@@ -108,12 +108,12 @@ let sockaddr t =
 let set_connected t f =
   let handler = t.handler in
   set_handler t
-              (fun t event ->
-                match event with
-                | `CONNECTED ->
-                   f t (sockaddr t)
-                | event -> handler t event
-              )
+    (fun t event ->
+      match event with
+      | `CONNECTED ->
+          f t (sockaddr t)
+      | event -> handler t event
+    )
 
 
 let queue_event t event =
@@ -135,16 +135,16 @@ let rec iter_socket t =
   t.wakener <- None;
   match t.sock with
   | Closing (fd, reason) ->
-     t.sock <- Closed reason;
-     let on_close () =
-       exec_handler t (`CLOSED reason);
-       Lwt.return_unit
-     in
-     Lwt.catch
-       (fun () ->
-         Lwt.bind (Lwt_unix.close fd) on_close
-       )
-       (fun exn -> on_close ())
+      t.sock <- Closed reason;
+      let on_close () =
+        exec_handler t (`CLOSED reason);
+        Lwt.return_unit
+      in
+      Lwt.catch
+        (fun () ->
+          Lwt.bind (Lwt_unix.close fd) on_close
+        )
+        (fun exn -> on_close ())
 
   | Closed reason ->
      Lwt.return_unit
@@ -182,7 +182,7 @@ let rec iter_socket t =
           end;
           if TcpBuffer.can_refill t.rbuf then
             Lwt.bind
-              (TcpBuffer.add_bytes_from_read
+              (TcpBuffer.add_from_fd
                  t.rbuf fd
                  (min 1_000_000 (TcpBuffer.max_refill t.rbuf)))
               (fun nread ->
@@ -276,7 +276,7 @@ let rec iter_socket t =
        (fun () ->
          t.wakener <- None;
          exec_events t;
-         iter_socket t)
+         Lwt.bind (Lwt_unix.yield ()) (fun () -> iter_socket t))
 
 let dummy_handler t event =
   match event with
@@ -333,16 +333,24 @@ let create ?name ?max_buf_size ?handler info fd  =
   create ?name ?max_buf_size info fd ?handler
 
 (* val write : t -> string -> pos:int -> len:int -> unit *)
-let write t s ~pos ~len =
+let write_string t s ~pos ~len =
   if len > 0 then begin
       if TcpBuffer.length t.wbuf = 0 then
         t.last_write <- NetTimer.current_time ();
-      TcpBuffer.add_bytes_from_string t.wbuf s pos len;
+      TcpBuffer.add_string t.wbuf s pos len;
       activate_thread t
     end
-
-let write_string t s =
-  write t s ~pos:0 ~len:(String.length s)
+let write_bytes t s ~pos ~len =
+  if len > 0 then begin
+      if TcpBuffer.length t.wbuf = 0 then
+        t.last_write <- NetTimer.current_time ();
+      TcpBuffer.add_bytes t.wbuf s pos len;
+      activate_thread t
+    end
+let write_string_full t s =
+  write_string t s ~pos:0 ~len:(String.length s)
+let write_bytes_full t s =
+  write_bytes t s ~pos:0 ~len:(Bytes.length s)
 
 (* val shutdown : t -> close_reason -> unit *)
 let shutdown t reason =
@@ -393,7 +401,8 @@ let read t s pos len =
 let read_string t len =
   let s = Bytes.create len in
   read t s 0 len;
-  s
+  Bytes.to_string s
+
 let read_all t =
   read_string t (TcpBuffer.length t.rbuf)
 

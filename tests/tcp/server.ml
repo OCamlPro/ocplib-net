@@ -40,7 +40,7 @@ let () =
                                 | `READ_DONE n ->
                                    (* Printf.eprintf "write_string ...\n%!"; *)
                                    counter := !counter + n;
-                                   TcpClientSocket.write_string
+                                   TcpClientSocket.write_string_full
                                      t
                                      (Printf.sprintf "READ %d\n" !counter);
                                    (* Printf.eprintf "read_string ...\n%!";*)
@@ -67,4 +67,4 @@ let () =
              )
   in
   TcpServerSocket.set_rtimeout t 10;
-  NetLoop.main ()
+  exit (NetLoop.main ())

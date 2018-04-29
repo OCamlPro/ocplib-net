@@ -154,10 +154,10 @@ val exec : string -> string array -> ?timeout:float ->
 
 
 (* force exit from Lwt loop (can be delayed by 0.1s) *)
-val exit : unit -> unit
+val exit : int -> unit
 
 (* loop in Lwt until [exit] is called *)
-val main : unit -> unit
+val main : unit -> int
 
 
 
@@ -170,7 +170,7 @@ module Timer : sig
 
   type t
   (* [create n f] calls [f] after [n] seconds. *)
-  val create : float -> (unit -> unit) -> t
+  val create : ?name:string -> float -> (unit -> unit) -> t
   (* [stop t] prevents [t] from happening *)
   val stop : t -> unit
 
