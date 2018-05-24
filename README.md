@@ -2,6 +2,8 @@
 
 # ocplib-net : a simple library to write networking applications
 
+No lwt, but on top of lwt
+
 ## Installation
 
 To build:
