@@ -1,7 +1,7 @@
 
 OCaml.library('ocplib-hex,
    ocaml + {
-     files = ' hex.ml;
+     files = ' ocpHex.ml;
      requires = ' ocplib-compat;
    });
    

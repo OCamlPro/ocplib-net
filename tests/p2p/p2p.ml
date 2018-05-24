@@ -9,6 +9,7 @@
 (**************************************************************************)
 
 open NetP2P
+open OcpHex
 
 type peer_info = {
     mutable peer_conn : peer_info connection option;

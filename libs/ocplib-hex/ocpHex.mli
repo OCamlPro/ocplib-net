@@ -8,18 +8,22 @@
 (*                                                                        *)
 (**************************************************************************)
 
-type t = string
+module Hex : sig
 
-val compare : t -> t -> int
-val equal : t -> t -> bool
+  type t = string
+
+  val compare : t -> t -> int
+  val equal : t -> t -> bool
 
 
-(* [encode s] converts a string to a lowercase hexadecimal notation *)
-val encode : string -> t
+  (** [encode s] converts a string to a lowercase hexadecimal notation *)
+  val encode : string -> t
 
-(* [encode s] converts a string to an uppercase hexadecimal notation *)
-val encodeU : string -> t
+  (** [encodeU s] converts a string to an uppercase hexadecimal notation *)
+  val encodeU : string -> t
 
-(* [decode hex] converts a string in hexadecimal notation into its
-  corresponding decoded string. Can raise Invalid_argument. *)
-val decode : t -> string
+  (** [decode hex] converts a string in hexadecimal notation into its
+     corresponding decoded string. Can raise Invalid_argument. *)
+  val decode : t -> string
+
+end

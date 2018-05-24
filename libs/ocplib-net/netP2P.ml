@@ -8,6 +8,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open OcpHex
 open NetTypes
 
 module StringMap = Map.Make(String)
