@@ -37,7 +37,7 @@ let name t =
 
 let exec_timer t =
   try
-    if t.active then t.action ()
+    t.action ()
   with
   | exn ->
     NetLog.info ~exn "NetTimer.exec: exn in timer handler of %s"
