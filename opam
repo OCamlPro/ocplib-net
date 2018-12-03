@@ -30,6 +30,10 @@ remove: [
 ]
 available: [ocaml-version >= "4.02.3"]
 depends: [
+     "lwt"
+     "lwt_log"
      "ocamlfind"
      "ocp-build"
+     "ocplib-compat"
+     "ocplib-endian"
 ]
