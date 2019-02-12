@@ -33,12 +33,11 @@ OCaml.library("ocplib-net",
                tcpClientSocket.ml
                tcpServerSocket.ml
                udpSocket.ml
-               
+
                (* higher interfaces *)
                concur.ml
                netP2P.ml (* requires ocplib-hex *)
 
              ];
-    requires = '[ ocplib-compat lwt.unix ocplib-endian ocplib-hex ];
+    requires = '[ ocplib-compat lwt.unix ocplib-endian ocplib-hex lwt_log ];
   });
-

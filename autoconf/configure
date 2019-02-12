@@ -593,21 +593,19 @@ OPAM_REPO_FORK_REMOTE
 OPAM_REPO_OFFICIAL_REMOTE
 OPAM_REPO
 ROOTDIR
-PROJECTURE_ARGS
+OCAML_PKG_lwt
+OCAML_PKG_ocplib_endian
+OCAML_PKG_ocplib_compat
+OCAML_PKG_lwt_log
 OCAML_PKG_ocp_build
 OCAMLBIN
-OCAMLVERSION_C
 CONFIGURE_ARGS
 metadir
 ocamldir
 OCAMLFIND
 OCAML_USE_POSIX_TYPES
 AWK
-OCAML_POINT_VERSION
-OCAML_MINOR_VERSION
-OCAML_MAJOR_VERSION
 SED
-OCAML_OS_TYPE
 OCAMLBUILD
 OCAMLDOC
 OCAMLMKLIB
@@ -648,7 +646,6 @@ infodir
 docdir
 oldincludedir
 includedir
-runstatedir
 localstatedir
 sharedstatedir
 sysconfdir
@@ -722,7 +719,6 @@ datadir='${datarootdir}'
 sysconfdir='${prefix}/etc'
 sharedstatedir='${prefix}/com'
 localstatedir='${prefix}/var'
-runstatedir='${localstatedir}/run'
 includedir='${prefix}/include'
 oldincludedir='/usr/include'
 docdir='${datarootdir}/doc/${PACKAGE_TARNAME}'
@@ -975,15 +971,6 @@ do
   | -silent | --silent | --silen | --sile | --sil)
     silent=yes ;;
 
-  -runstatedir | --runstatedir | --runstatedi | --runstated \
-  | --runstate | --runstat | --runsta | --runst | --runs \
-  | --run | --ru | --r)
-    ac_prev=runstatedir ;;
-  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
-  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
-  | --run=* | --ru=* | --r=*)
-    runstatedir=$ac_optarg ;;
-
   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
     ac_prev=sbindir ;;
   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
@@ -1121,7 +1108,7 @@ fi
 for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
 		datadir sysconfdir sharedstatedir localstatedir includedir \
 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
-		libdir localedir mandir runstatedir
+		libdir localedir mandir
 do
   eval ac_val=\$$ac_var
   # Remove trailing slashes.
@@ -1274,7 +1261,6 @@ Fine tuning of the installation directories:
   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
-  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
   --libdir=DIR            object code libraries [EPREFIX/lib]
   --includedir=DIR        C header files [PREFIX/include]
   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
@@ -1793,7 +1779,7 @@ ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $
 ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
-PROJECTURE_ARGS=$*
+CONFIGURE_ARGS=$*
 
 OCAML_MINIMAL_VERSION=4.02.3
 
@@ -2699,7 +2685,7 @@ fi
 
 
   if test "$OCAMLC" != "no"; then
-     OCAMLVERSION=`$OCAMLC -v | tr -d '\015' | sed -n -e 's|.*version* *\(.*\)$|\1|p'`
+     OCAMLVERSION=`$OCAMLC -v | sed -n -e 's|.*version* *\(.*\)$|\1|p'`
      { $as_echo "$as_me:${as_lineno-$LINENO}: result: OCaml version is $OCAMLVERSION" >&5
 $as_echo "OCaml version is $OCAMLVERSION" >&6; }
      # If OCAMLLIB is set, use it
@@ -2813,7 +2799,7 @@ fi
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Cannot find ocamlopt; bytecode compilation only." >&5
 $as_echo "$as_me: WARNING: Cannot find ocamlopt; bytecode compilation only." >&2;}
      else
-	TMPVERSION=`$OCAMLOPT -v | tr -d '\015' | sed -n -e 's|.*version* *\(.*\)$|\1|p' `
+	TMPVERSION=`$OCAMLOPT -v | sed -n -e 's|.*version* *\(.*\)$|\1|p' `
 	if test "$TMPVERSION" != "$OCAMLVERSION" ; then
 	    { $as_echo "$as_me:${as_lineno-$LINENO}: result: versions differs from ocamlc; ocamlopt discarded." >&5
 $as_echo "versions differs from ocamlc; ocamlopt discarded." >&6; }
@@ -2919,7 +2905,7 @@ else
 fi
 
      if test "$OCAMLCDOTOPT" != "no"; then
-	TMPVERSION=`$OCAMLCDOTOPT -v | tr -d '\015' | sed -n -e 's|.*version* *\(.*\)$|\1|p' `
+	TMPVERSION=`$OCAMLCDOTOPT -v | sed -n -e 's|.*version* *\(.*\)$|\1|p' `
 	if test "$TMPVERSION" != "$OCAMLVERSION" ; then
 	    { $as_echo "$as_me:${as_lineno-$LINENO}: result: versions differs from ocamlc; ocamlc.opt discarded." >&5
 $as_echo "versions differs from ocamlc; ocamlc.opt discarded." >&6; }
@@ -3023,7 +3009,7 @@ else
 fi
 
 	if test "$OCAMLOPTDOTOPT" != "no"; then
-	   TMPVERSION=`$OCAMLOPTDOTOPT -v | tr -d '\015' | sed -n -e 's|.*version* *\(.*\)$|\1|p' `
+	   TMPVERSION=`$OCAMLOPTDOTOPT -v | sed -n -e 's|.*version* *\(.*\)$|\1|p' `
 	   if test "$TMPVERSION" != "$OCAMLVERSION" ; then
 	      { $as_echo "$as_me:${as_lineno-$LINENO}: result: version differs from ocamlc; ocamlopt.opt discarded." >&5
 $as_echo "version differs from ocamlc; ocamlopt.opt discarded." >&6; }
@@ -3320,7 +3306,7 @@ else
 fi
 
 	if test "$OCAMLDEPDOTOPT" != "no"; then
-	   TMPVERSION=`$OCAMLDEPDOTOPT -version | tr -d '\015' | sed -n -e 's|.*version* *\(.*\)$|\1|p' `
+	   TMPVERSION=`$OCAMLDEPDOTOPT -version | sed -n -e 's|.*version* *\(.*\)$|\1|p' `
 	   if test "$TMPVERSION" != "$OCAMLVERSION" ; then
 	      { $as_echo "$as_me:${as_lineno-$LINENO}: result: version differs from ocamlc; ocamldep.opt discarded." >&5
 $as_echo "version differs from ocamlc; ocamldep.opt discarded." >&6; }
@@ -3706,21 +3692,6 @@ else
 fi
 
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking OCaml Sys.os_type" >&5
-$as_echo_n "checking OCaml Sys.os_type... " >&6; }
-
-  cat > conftest.ml <<EOF
-  print_string(Sys.os_type);;
-EOF
-
-  OCAML_OS_TYPE=`$OCAML conftest.ml`
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $OCAML_OS_TYPE" >&5
-$as_echo "$OCAML_OS_TYPE" >&6; }
-
-
-if test "${OCAML_OS_TYPE}" = "Win32" ; then
-  OCAMLLIB="$(echo "${OCAMLLIB}" | tr -d '\015' | sed -e 's|\\|/|g')"
-fi
 
 ROOTDIR=$(dirname $(pwd))
 
@@ -3812,12 +3783,8 @@ $as_echo_n "checking Point version... " >&6; }
 $as_echo "$AX_POINT_VERSION" >&6; }
 
 OCAML_MAJOR_VERSION=$AX_MAJOR_VERSION
-
 OCAML_MINOR_VERSION=$AX_MINOR_VERSION
-
 OCAML_POINT_VERSION=$AX_POINT_VERSION
-
-OCAMLVERSION_C=$OCAML_MAJOR_VERSION$OCAML_MINOR_VERSION$OCAML_POINT_VERSION
 
 if test "$OCAMLC" = "no"; then
    as_fn_error $? "You must install the OCaml compiler" "$LINENO" 5
@@ -4059,11 +4026,7 @@ fi
 
 
 if test "${OCAMLFIND}" != "no"; then
-  if test "${OCAML_OS_TYPE}" = "Win32" ; then
-    metadir="$(${OCAMLFIND} -printconf destdir | tr -d '\015' | sed -e 's|\\|/|g')"
-  else
-    metadir="$(${OCAMLFIND} -printconf destdir)"
-  fi
+  metadir="$(${OCAMLFIND} -printconf destdir)"
   echo "initializing metadir from ocamlfind config"
 fi
 
@@ -4094,7 +4057,6 @@ fi
 if test "${with_metadir+set}" = set; then :
   withval=$with_metadir; metadir="${withval}"
 fi
-
 
 
 
@@ -4137,18 +4099,131 @@ $as_echo "not found" >&6; }
 
 
 if test "$OCAML_PKG_ocp_build" = "no"; then
-   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: BEFORE ERROR: Please install OCaml package 'ocp-build'." >&5
-$as_echo "$as_me: WARNING: BEFORE ERROR: Please install OCaml package 'ocp-build'." >&2;}
+   as_fn_error $? "Please install OCaml package 'ocp-build'." "$LINENO" 5
 fi
-if test "$OCAML_PKG_ocp_build" = "no"; then
-   { { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
-$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
-as_fn_error $? "Missing dependencies (see warnings above).
-See \`config.log' for more details" "$LINENO" 5; }
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for OCaml findlib package lwt_log" >&5
+$as_echo_n "checking for OCaml findlib package lwt_log... " >&6; }
+
+  unset found
+  unset pkg
+  found=no
+  for pkg in lwt_log  ; do
+    if $OCAMLFIND query $pkg >/dev/null 2>/dev/null; then
+      OCAML_PKG_lwt_log=$pkg
+      ocaml_pkg_version=$($OCAMLFIND query -l $pkg|grep version: | awk '{ print $2}')
+      OCAML_PKG_lwt_log_VERSION=$ocaml_pkg_version
+
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ocaml_pkg_version" >&5
+$as_echo "$ocaml_pkg_version" >&6; }
+      found=yes
+      break
+    fi
+  done
+  if test "$found" = "no" ; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
+$as_echo "not found" >&6; }
+    OCAML_PKG_lwt_log=no
+  fi
+
+
+
+if test "$OCAML_PKG_lwt_log" = "no"; then
+   as_fn_error $? "Please install OCaml package 'lwt_log'." "$LINENO" 5
 fi
-OPAM_REPO=/home/lefessan/GIT/ocp-public/opam-repository
-OPAM_REPO_OFFICIAL_REMOTE=ocaml
-OPAM_REPO_FORK_REMOTE=origin
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for OCaml findlib package ocplib-compat" >&5
+$as_echo_n "checking for OCaml findlib package ocplib-compat... " >&6; }
+
+  unset found
+  unset pkg
+  found=no
+  for pkg in ocplib-compat  ; do
+    if $OCAMLFIND query $pkg >/dev/null 2>/dev/null; then
+      OCAML_PKG_ocplib_compat=$pkg
+      ocaml_pkg_version=$($OCAMLFIND query -l $pkg|grep version: | awk '{ print $2}')
+      OCAML_PKG_ocplib_compat_VERSION=$ocaml_pkg_version
+
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ocaml_pkg_version" >&5
+$as_echo "$ocaml_pkg_version" >&6; }
+      found=yes
+      break
+    fi
+  done
+  if test "$found" = "no" ; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
+$as_echo "not found" >&6; }
+    OCAML_PKG_ocplib_compat=no
+  fi
+
+
+
+if test "$OCAML_PKG_ocplib_compat" = "no"; then
+   as_fn_error $? "Please install OCaml package 'ocplib-compat'." "$LINENO" 5
+fi
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for OCaml findlib package ocplib-endian" >&5
+$as_echo_n "checking for OCaml findlib package ocplib-endian... " >&6; }
+
+  unset found
+  unset pkg
+  found=no
+  for pkg in ocplib-endian  ; do
+    if $OCAMLFIND query $pkg >/dev/null 2>/dev/null; then
+      OCAML_PKG_ocplib_endian=$pkg
+      ocaml_pkg_version=$($OCAMLFIND query -l $pkg|grep version: | awk '{ print $2}')
+      OCAML_PKG_ocplib_endian_VERSION=$ocaml_pkg_version
+
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ocaml_pkg_version" >&5
+$as_echo "$ocaml_pkg_version" >&6; }
+      found=yes
+      break
+    fi
+  done
+  if test "$found" = "no" ; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
+$as_echo "not found" >&6; }
+    OCAML_PKG_ocplib_endian=no
+  fi
+
+
+
+if test "$OCAML_PKG_ocplib_endian" = "no"; then
+   as_fn_error $? "Please install OCaml package 'ocplib-endian'." "$LINENO" 5
+fi
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for OCaml findlib package lwt" >&5
+$as_echo_n "checking for OCaml findlib package lwt... " >&6; }
+
+  unset found
+  unset pkg
+  found=no
+  for pkg in lwt  ; do
+    if $OCAMLFIND query $pkg >/dev/null 2>/dev/null; then
+      OCAML_PKG_lwt=$pkg
+      ocaml_pkg_version=$($OCAMLFIND query -l $pkg|grep version: | awk '{ print $2}')
+      OCAML_PKG_lwt_VERSION=$ocaml_pkg_version
+
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ocaml_pkg_version" >&5
+$as_echo "$ocaml_pkg_version" >&6; }
+      found=yes
+      break
+    fi
+  done
+  if test "$found" = "no" ; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
+$as_echo "not found" >&6; }
+    OCAML_PKG_lwt=no
+  fi
+
+
+
+if test "$OCAML_PKG_lwt" = "no"; then
+   as_fn_error $? "Please install OCaml package 'lwt'." "$LINENO" 5
+fi
+OPAM_REPO=
+OPAM_REPO_OFFICIAL_REMOTE=
+OPAM_REPO_FORK_REMOTE=
 DOWNLOAD_URL_PREFIX=http://github.com/OCamlPro/ocplib-net/archive/
 
 ###############################################################
@@ -4168,7 +4243,6 @@ DOWNLOAD_URL_PREFIX=http://github.com/OCamlPro/ocplib-net/archive/
 ## END of autoconf.ac                                         #
 ##                                                            #
 ###############################################################
-
 
 
 

@@ -8,7 +8,7 @@
 #                                                     #
 #######################################################
 AC_INIT(ocplib-net,0.1)
-PROJECTURE_ARGS=$*
+CONFIGURE_ARGS=$*
 AC_COPYRIGHT(Copyright 2018-2018 OCamlPro SAS)
 OCAML_MINIMAL_VERSION=4.02.3
 AC_CONFIG_MACRO_DIR([m4])
@@ -26,18 +26,13 @@ AC_ARG_ENABLE(bin-annot,
 AC_PROG_CC
 
 AC_PROG_OCAML
-AC_CHECK_OCAML_OS_TYPE
-if test "${OCAML_OS_TYPE}" = "Win32" ; then
-  OCAMLLIB="$(echo "${OCAMLLIB}" | tr -d '\015' | sed -e 's|\\|/|g')"
-fi
 
 ROOTDIR=$(dirname $(pwd))
 
 AX_SPLIT_VERSION(OCAMLVERSION)
-AC_SUBST(OCAML_MAJOR_VERSION,$AX_MAJOR_VERSION)
-AC_SUBST(OCAML_MINOR_VERSION,$AX_MINOR_VERSION)
-AC_SUBST(OCAML_POINT_VERSION,$AX_POINT_VERSION)
-OCAMLVERSION_C=$OCAML_MAJOR_VERSION$OCAML_MINOR_VERSION$OCAML_POINT_VERSION
+OCAML_MAJOR_VERSION=$AX_MAJOR_VERSION
+OCAML_MINOR_VERSION=$AX_MINOR_VERSION
+OCAML_POINT_VERSION=$AX_POINT_VERSION
 
 if test "$OCAMLC" = "no"; then
    AC_MSG_ERROR([You must install the OCaml compiler])
@@ -75,11 +70,7 @@ metadir='${ocamldir}'
 
 AC_PROG_FINDLIB
 if test "${OCAMLFIND}" != "no"; then
-  if test "${OCAML_OS_TYPE}" = "Win32" ; then
-    metadir="$(${OCAMLFIND} -printconf destdir | tr -d '\015' | sed -e 's|\\|/|g')"
-  else
-    metadir="$(${OCAMLFIND} -printconf destdir)"
-  fi
+  metadir="$(${OCAMLFIND} -printconf destdir)"
   echo "initializing metadir from ocamlfind config"
 fi
 
@@ -115,7 +106,6 @@ AC_SUBST(metadir)
 
 AC_SUBST(CONFIGURE_ARGS)
 AC_SUBST(OCAMLVERSION)
-AC_SUBST(OCAMLVERSION_C)
 AC_SUBST(OCAMLLIB)
 AC_SUBST(OCAMLOPT)
 AC_SUBST(OCAMLDEP)
@@ -125,14 +115,27 @@ if test "$OCAMLFIND" = "no"; then
 fi
 AC_CHECK_OCAML_PKG(ocp-build)
 if test "$OCAML_PKG_ocp_build" = "no"; then
-   AC_MSG_WARN([BEFORE ERROR: Please install OCaml package 'ocp-build'.])
+   AC_MSG_ERROR([Please install OCaml package 'ocp-build'.])
 fi
-if test "$OCAML_PKG_ocp_build" = "no"; then
-   AC_MSG_FAILURE([Missing dependencies (see warnings above).])
+AC_CHECK_OCAML_PKG(lwt_log)
+if test "$OCAML_PKG_lwt_log" = "no"; then
+   AC_MSG_ERROR([Please install OCaml package 'lwt_log'.])
 fi
-OPAM_REPO=/home/lefessan/GIT/ocp-public/opam-repository
-OPAM_REPO_OFFICIAL_REMOTE=ocaml
-OPAM_REPO_FORK_REMOTE=origin
+AC_CHECK_OCAML_PKG(ocplib-compat)
+if test "$OCAML_PKG_ocplib_compat" = "no"; then
+   AC_MSG_ERROR([Please install OCaml package 'ocplib-compat'.])
+fi
+AC_CHECK_OCAML_PKG(ocplib-endian)
+if test "$OCAML_PKG_ocplib_endian" = "no"; then
+   AC_MSG_ERROR([Please install OCaml package 'ocplib-endian'.])
+fi
+AC_CHECK_OCAML_PKG(lwt)
+if test "$OCAML_PKG_lwt" = "no"; then
+   AC_MSG_ERROR([Please install OCaml package 'lwt'.])
+fi
+OPAM_REPO=
+OPAM_REPO_OFFICIAL_REMOTE=
+OPAM_REPO_FORK_REMOTE=
 DOWNLOAD_URL_PREFIX=http://github.com/OCamlPro/ocplib-net/archive/
 
 ###############################################################
@@ -154,7 +157,7 @@ DOWNLOAD_URL_PREFIX=http://github.com/OCamlPro/ocplib-net/archive/
 ###############################################################
 
 AC_SUBST(OCAMLFIND)
-AC_SUBST(PROJECTURE_ARGS)
+AC_SUBST(CONFIGURE_ARGS)
 AC_SUBST(ROOTDIR)
 AC_SUBST(prefix)
 AC_SUBST(exec_prefix)
@@ -172,7 +175,6 @@ AC_SUBST(OPAM_REPO_OFFICIAL_REMOTE)
 AC_SUBST(OPAM_REPO_FORK_REMOTE)
 AC_SUBST(DOWNLOAD_URL_PREFIX)
 AC_SUBST(OCAMLVERSION)
-AC_SUBST(OCAMLVERSION_C)
 AC_SUBST(OCAMLC)
 AC_SUBST(OCAMLOPT)
 AC_SUBST(OCAMLDEP)
